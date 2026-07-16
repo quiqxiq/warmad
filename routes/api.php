@@ -1,0 +1,36 @@
+<?php
+
+use App\Http\Controllers\Api\CashReconciliationController;
+use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\DebtController;
+use App\Http\Controllers\Api\OutletController;
+use App\Http\Controllers\Api\ShiftController;
+use App\Http\Controllers\Api\StockOpnameItemController;
+use App\Http\Controllers\Api\StockOpnameSessionController;
+use App\Http\Controllers\Api\TransactionController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('user', function (Request $request) {
+        return $request->user();
+    })->name('api.user');
+
+    Route::apiResource('outlets', OutletController::class);
+    Route::apiResource('categories', CategoryController::class);
+    Route::apiResource('shifts', ShiftController::class)->except('destroy');
+    Route::apiResource('transactions', TransactionController::class)->only(['index', 'store', 'show']);
+    Route::apiResource('cash-reconciliations', CashReconciliationController::class)->only(['index', 'store', 'show']);
+    Route::apiResource('debts', DebtController::class)->except('destroy');
+
+    Route::apiResource('stock-opname-sessions', StockOpnameSessionController::class)->except('destroy');
+    Route::post('stock-opname-sessions/{stock_opname_session}/confirm', [StockOpnameSessionController::class, 'confirm'])
+        ->name('stock-opname-sessions.confirm');
+
+    Route::get('stock-opname-sessions/{stock_opname_session}/items', [StockOpnameItemController::class, 'index'])
+        ->name('stock-opname-sessions.items.index');
+    Route::post('stock-opname-sessions/{stock_opname_session}/items', [StockOpnameItemController::class, 'store'])
+        ->name('stock-opname-sessions.items.store');
+    Route::delete('stock-opname-sessions/{stock_opname_session}/items/{item}', [StockOpnameItemController::class, 'destroy'])
+        ->name('stock-opname-sessions.items.destroy');
+});

@@ -8,6 +8,7 @@ use App\Models\CashReconciliation;
 use App\Models\Shift;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class CashReconciliationController extends Controller
@@ -23,6 +24,8 @@ class CashReconciliationController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        Gate::authorize('viewAny', CashReconciliation::class);
+
         $validated = $request->validate([
             'outlet_id' => ['sometimes', 'integer', Rule::exists('outlets', 'id')],
         ]);
@@ -41,6 +44,8 @@ class CashReconciliationController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        Gate::authorize('create', CashReconciliation::class);
+
         $validated = $request->validate([
             'shift_id' => ['required', 'integer', Rule::exists('shifts', 'id'), Rule::unique('cash_reconciliations', 'shift_id')],
             'actual_cash' => ['required', 'integer', 'min:0'],
@@ -80,6 +85,8 @@ class CashReconciliationController extends Controller
      */
     public function show(CashReconciliation $cashReconciliation): JsonResponse
     {
+        Gate::authorize('view', $cashReconciliation);
+
         return response()->json(['data' => $cashReconciliation->load('shift')]);
     }
 }

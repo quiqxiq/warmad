@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'whatsapp' => [
+        // "log" (default, development) or "fonnte"
+        'driver' => env('WHATSAPP_DRIVER', 'log'),
+    ],
+
+    'fonnte' => [
+        'token' => env('FONNTE_TOKEN'),
+    ],
+
 ];

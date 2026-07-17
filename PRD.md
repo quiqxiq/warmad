@@ -152,8 +152,11 @@ Ini titik paling kritis karena hasilnya jadi **baseline modal awal** yang menent
 ### 6.3 Transaksi Harian
 - ~20–40 tombol kategori besar (rokok, sembako, minuman dingin/panas, snack, pulsa/PPOB, bensin eceran, gas, lain-lain) dengan harga default yang bisa disesuaikan cepat.
 - Scan barcode opsional untuk barang berkemasan yang sudah terdaftar dari sesi opname.
-- Input suara opsional untuk transaksi cepat.
-- Semua transaksi tersimpan lokal dulu (offline-capable), sync ke server saat ada koneksi.
+- **Voice-first input via Voice Queue (Antrean Suara)** untuk efisiensi tinggi saat warung ramai:
+  - Penjaga dapat merekam suara pembeli satu demi satu (seperti mengirim Voice Note di WhatsApp) dengan cepat tanpa perlu menunggu proses konversi selesai. Rekaman disimpan instan sebagai antrean kartu lokal (Voice Cards) di device.
+  - Proses transkripsi (Speech-to-Text) dan analisis berbasis AI (LLM parser) berjalan secara asinkron di background. Kartu antrean akan berubah status jika AI selesai mem-parse ucapan tersebut menjadi daftar produk/kategori.
+  - Penjaga cukup mengetuk kartu antrean yang siap untuk membuka popup konfirmasi yang menampilkan list barang beserta nominal belanja dan kolom input nominal bayar (kembalian dihitung otomatis). Hal ini mencegah data kacau akibat salah dengar AI sebelum transaksi resmi dicatat.
+- Semua transaksi tersimpan lokal dulu (offline-capable), sync ke server saat ada koneksi. File rekaman suara diantre secara lokal di IndexedDB ketika tidak ada jaringan.
 
 ### 6.4 Tutup Kasir & Rekonsiliasi Harian
 - **Check-in awal shift**: penjaga wajib foto diri + sistem catat geolokasi saat mulai jaga — pola ini diadopsi dari fitur absensi foto+geolokasi yang sudah terbukti dipakai luas (mis. Majoo). Fungsinya di sini bukan sekadar absensi, tapi bukti tambahan siapa yang benar-benar bertugas di jam berapa, berguna kalau ada sengketa terkait waktu kejadian.
@@ -332,10 +335,63 @@ Ini validasi penting hasil riset — tidak satupun aplikasi di atas, baik komers
 2. **Rekonsiliasi kas harian yang secara eksplisit dirancang mendeteksi selisih sebelum menumpuk** (6.4) — kompetitor fokus ke laporan laba-rugi retrospektif, bukan pencegahan sengketa.
 3. **Trust ledger dua arah untuk hubungan kerja informal** (6.8) — yang ada di pasar hanya penilaian kinerja karyawan formal satu arah (atasan menilai bawahan), bukan untuk konteks kekerabatan dengan rotasi tinggi.
 4. **Marketplace pencarian penjaga berbasis rekam jejak** (6.9) — rekrutmen di sektor ini 100% masih berbasis jaringan kenalan; tidak ada satupun platform yang membuka akses itu lebih luas.
-5. **Transaksi voice-first yang dilatih ke katalog spesifik satu warung** (6.3) — kompetitor yang punya voice/AI (mis. Majoo lewat WhatsApp AI) mengarah ke layanan pelanggan, bukan ke pencatatan transaksi cepat oleh penjaga.
+5. **Transaksi voice-first berbasis Voice Queue (Antrean Suara)** (6.3) — meminimalkan latency pengenalan suara saat warung ramai dengan menyimpan rekaman sebagai antrean kartu lokal, memprosesnya secara asinkron di background melalui AI parser, dan menyediakan popup konfirmasi manual sebelum transaksi disimpan. Kompetitor kasir lain tidak ada yang memiliki antrean rekaman suara asinkron seperti ini.
 
 Kesimpulannya sama seperti sebelumnya, tapi sekarang dengan bukti lebih konkret: pasar UMKM retail di Indonesia sudah ramai dan matang untuk fitur pembukuan/pembayaran generik, tapi kosong total untuk masalah spesifik yang jadi titik tolak produk ini — kepercayaan saat rotasi tenaga kerja informal.
 
 ---
 
 **Langkah berikutnya yang disarankan:** validasi PRD ini ke 3–5 juragan warung Madura nyata sebelum mulai development V2 — khususnya soal kesediaan bayar dan reaksi mereka terhadap fitur opname multi-mode & rating dua arah.
+
+
+Ide
+apakah jika ada ai akan tetap cepat atau malah akan delay yang lama untuk prosesnya, atau pendekatan seperti pesan suara saja seperti whatsapp untuk menagani banyak pembeli, jadi nanti jika terdapat banyak pembeli bisa langsung klik ikon suara lalu berikan apa saja yang dibbeli, setela itu baru klik lagi untuk pembeli lainnya dan setiap suara yang sudah disimpan bisa langsung di proses dengan mengkliknya dan nantinya sat di proses akan muncul popup produk yang sesuai dengan suara gitu. bagaimana menurutmu
+
+Ide pendekatan **antrean pesan suara (Voice Queue)** yang Anda usulkan ini **sangat brilian dan jauh lebih realistis untuk kondisi lapangan warung Madura!**
+
+Ini adalah solusi UX (User Experience) tingkat lanjut yang memecahkan masalah performa, koneksi internet, dan kesibukan penjaga sekaligus. 
+
+Berikut adalah analisis mengapa ide Anda sangat bagus dan perbandingannya dengan sistem *real-time*:
+
+---
+
+### Perbandingan UX: Real-Time vs Antrean Suara (Voice Queue)
+
+| Aspek | Pendekatan Real-Time | Pendekatan Antrean Suara (Usulan Anda) |
+| :--- | :--- | :--- |
+| **Kecepatan saat Ramai** | **Lambat.** Penjaga harus menunggu AI memproses (~1.5–3 detik) sebelum bisa melayani pembeli berikutnya. Jika internet lemot, antrean pembeli akan menumpuk. | **Sangat Cepat.** Penjaga hanya rekam 2 detik, simpan ke antrean lokal, dan langsung bisa melayani/merekam pembeli berikutnya. |
+| **Ketergantungan Internet** | **Sangat Tinggi.** Jika koneksi terputus, fitur input suara langsung tidak bisa digunakan sama sekali. | **Aman (Offline-First).** Rekaman suara disimpan sebagai file audio lokal di browser (IndexedDB PWA). Begitu internet stabil, PWA mengirimkannya ke API untuk diproses. |
+| **Akurasi & Kontrol** | **Rendah.** Jika AI salah dengar (misal "Surya dua" didengar "Surya muda"), transaksi langsung masuk dan data kas/stok menjadi kacau tanpa disadari penjaga. | **Tinggi (Ada Verifikasi).** Saat antrean diklik, muncul popup hasil parse AI. Penjaga bisa mengoreksi jumlah/kategori jika AI salah dengar sebelum mengklik tombol **"Bayar"**. |
+
+---
+
+### Bagaimana Cara Kerja Teknis Terbaik untuk Ide Anda?
+
+Untuk mengimplementasikan ide ini tanpa membuat server Anda berat, kita bisa menggunakan teknik **Background Processing**:
+
+1. **Rekam & Antre (Instant)**:
+   * Pembeli A datang $\rightarrow$ Penjaga klik mikrofon, bicara, klik simpan $\rightarrow$ Muncul kartu **"Antrean 1"** (menyimpan audio lokal).
+   * Pembeli B datang $\rightarrow$ Lakukan hal yang sama $\rightarrow$ Muncul kartu **"Antrean 2"**.
+2. **Proses di Background (Asinkron)**:
+   * Begitu tombol "Simpan" diklik, aplikasi PWA di latar belakang langsung mengirim audio ke server untuk di-parse oleh AI.
+   * Saat proses AI selesai (misal butuh 2 detik), kartu **"Antrean 1"** berubah warna atau memunculkan ikon centang hijau $\rightarrow$ menandakan **"Data Siap Ditinjau"**.
+3. **Eksekusi Pembayaran**:
+   * Saat penjaga punya waktu luang, dia tinggal mengetuk kartu **"Antrean 1"**.
+   * Popup langsung muncul menampilkan: 
+     * *Rokok Surya (2 bungkus) - Rp60.000*
+     * *Aqua Dingin (1 botol) - Rp5.000*
+     * **Total: Rp65.000**
+   * Penjaga tinggal klik **"Bayar"**, masukkan uang yang diterima, selesai!
+
+---
+
+### Apakah Backend Sudah Mendukung Ini?
+
+Secara arsitektur, backend yang kita bangun saat ini **sudah sangat kompatibel** karena:
+1. Endpoint transaksi kita bersifat **idempotent** menggunakan `client_uuid` (untuk mencegah transaksi ganda jika dikirim ulang).
+2. Data yang masuk tetap menggunakan format terstruktur yang sama.
+
+Jika nanti Anda masuk ke tahap development frontend/PWA (V2/V3), kita hanya perlu menambahkan satu endpoint sederhana di backend:
+* **`POST /api/voice/parse`**: Endpoint ini menerima file audio rekaman, mengirimkannya ke Whisper/Gemini API, lalu mengembalikan JSON hasil konversi teks ke produk/kategori. Data audio ini tidak perlu disimpan permanen di database server (bisa langsung dihapus setelah di-parse untuk menghemat storage).
+
+Apakah konsep alur kerja antrean suara (Voice Queue) dengan verifikasi popup ini yang akan kita jadikan acuan untuk development frontend nanti?

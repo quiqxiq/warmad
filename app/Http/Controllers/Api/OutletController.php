@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Outlet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class OutletController extends Controller
 {
@@ -14,6 +15,8 @@ class OutletController extends Controller
      */
     public function index(): JsonResponse
     {
+        Gate::authorize('viewAny', Outlet::class);
+
         return response()->json([
             'data' => Outlet::query()->latest()->get(),
         ]);
@@ -24,6 +27,8 @@ class OutletController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        Gate::authorize('create', Outlet::class);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'address' => ['nullable', 'string', 'max:255'],
@@ -39,6 +44,8 @@ class OutletController extends Controller
      */
     public function show(Outlet $outlet): JsonResponse
     {
+        Gate::authorize('view', $outlet);
+
         return response()->json([
             'data' => $outlet->load('categories', 'users'),
         ]);
@@ -49,6 +56,8 @@ class OutletController extends Controller
      */
     public function update(Request $request, Outlet $outlet): JsonResponse
     {
+        Gate::authorize('update', $outlet);
+
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'address' => ['nullable', 'string', 'max:255'],
@@ -65,6 +74,8 @@ class OutletController extends Controller
      */
     public function destroy(Outlet $outlet): JsonResponse
     {
+        Gate::authorize('delete', $outlet);
+
         $outlet->delete();
 
         return response()->json(status: 204);

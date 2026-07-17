@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Services\WhatsApp\FonnteWhatsAppGateway;
+use App\Services\WhatsApp\LogWhatsAppGateway;
+use App\Services\WhatsApp\WhatsAppGateway;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +18,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(WhatsAppGateway::class, function (): WhatsAppGateway {
+            return match (config('services.whatsapp.driver')) {
+                'fonnte' => new FonnteWhatsAppGateway(
+                    token: (string) config('services.fonnte.token'),
+                ),
+                default => new LogWhatsAppGateway,
+            };
+        });
     }
 
     /**

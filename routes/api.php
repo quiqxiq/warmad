@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Auth\OtpController;
 use App\Http\Controllers\Api\CashReconciliationController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\DebtController;
@@ -10,6 +11,11 @@ use App\Http\Controllers\Api\StockOpnameSessionController;
 use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
+Route::post('auth/otp/request', [OtpController::class, 'request'])->name('api.auth.otp.request');
+Route::post('auth/otp/verify', [OtpController::class, 'verify'])
+    ->middleware('throttle:10,1')
+    ->name('api.auth.otp.verify');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('user', function (Request $request) {

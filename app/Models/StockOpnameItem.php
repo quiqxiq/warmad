@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\InputMethod;
+use App\Models\Concerns\Auditable;
 use Database\Factories\StockOpnameItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -36,6 +37,8 @@ use Illuminate\Support\Carbon;
 ])]
 class StockOpnameItem extends Model
 {
+    use Auditable;
+
     /** @use HasFactory<StockOpnameItemFactory> */
     use HasFactory;
 

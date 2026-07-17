@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\OpnameSessionStatus;
 use App\Enums\OpnameSessionType;
+use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Database\Factories\StockOpnameSessionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -38,6 +39,7 @@ use Illuminate\Support\Carbon;
 ])]
 class StockOpnameSession extends Model
 {
+    use Auditable;
     use BelongsToTenant;
 
     /** @use HasFactory<StockOpnameSessionFactory> */

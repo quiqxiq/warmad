@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\OutletUserRole;
 use App\Models\Outlet;
 use App\Models\Tenant;
 use App\Models\User;
@@ -8,6 +9,7 @@ use Laravel\Sanctum\Sanctum;
 beforeEach(function () {
     $this->tenant = Tenant::factory()->create();
     $this->user = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $this->user->assignRole(OutletUserRole::Owner->value);
 
     Sanctum::actingAs($this->user);
 });

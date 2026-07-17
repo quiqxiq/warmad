@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Debt;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class DebtController extends Controller
@@ -16,6 +17,8 @@ class DebtController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        Gate::authorize('viewAny', Debt::class);
+
         $validated = $request->validate([
             'outlet_id' => ['sometimes', 'integer', Rule::exists('outlets', 'id')],
             'status' => ['sometimes', Rule::enum(DebtStatus::class)],
@@ -35,6 +38,8 @@ class DebtController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        Gate::authorize('create', Debt::class);
+
         $validated = $request->validate([
             'client_uuid' => ['required', 'uuid'],
             'outlet_id' => ['required', 'integer', Rule::exists('outlets', 'id')],
@@ -57,6 +62,8 @@ class DebtController extends Controller
      */
     public function show(Debt $debt): JsonResponse
     {
+        Gate::authorize('view', $debt);
+
         return response()->json(['data' => $debt]);
     }
 
@@ -65,6 +72,8 @@ class DebtController extends Controller
      */
     public function update(Request $request, Debt $debt): JsonResponse
     {
+        Gate::authorize('update', $debt);
+
         $validated = $request->validate([
             'paid_amount' => ['required', 'integer', 'min:0', 'max:'.$debt->amount],
             'note' => ['nullable', 'string', 'max:255'],

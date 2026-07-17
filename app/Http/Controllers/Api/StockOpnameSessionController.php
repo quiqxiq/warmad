@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\StockOpnameSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class StockOpnameSessionController extends Controller
@@ -17,6 +18,8 @@ class StockOpnameSessionController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        Gate::authorize('viewAny', StockOpnameSession::class);
+
         $validated = $request->validate([
             'outlet_id' => ['sometimes', 'integer', Rule::exists('outlets', 'id')],
         ]);
@@ -34,6 +37,8 @@ class StockOpnameSessionController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        Gate::authorize('create', StockOpnameSession::class);
+
         $validated = $request->validate([
             'outlet_id' => ['required', 'integer', Rule::exists('outlets', 'id')],
             'type' => ['required', Rule::enum(OpnameSessionType::class)],
@@ -56,6 +61,8 @@ class StockOpnameSessionController extends Controller
      */
     public function show(StockOpnameSession $stockOpnameSession): JsonResponse
     {
+        Gate::authorize('view', $stockOpnameSession);
+
         return response()->json([
             'data' => $stockOpnameSession->load('items', 'outgoingUser', 'incomingUser'),
         ]);
@@ -66,6 +73,8 @@ class StockOpnameSessionController extends Controller
      */
     public function update(Request $request, StockOpnameSession $stockOpnameSession): JsonResponse
     {
+        Gate::authorize('update', $stockOpnameSession);
+
         $validated = $request->validate([
             'status' => ['sometimes', Rule::enum(OpnameSessionStatus::class), Rule::notIn([OpnameSessionStatus::Final->value])],
             'note' => ['nullable', 'string', 'max:1000'],
@@ -82,6 +91,8 @@ class StockOpnameSessionController extends Controller
      */
     public function confirm(Request $request, StockOpnameSession $stockOpnameSession): JsonResponse
     {
+        Gate::authorize('update', $stockOpnameSession);
+
         $user = $request->user();
 
         if (! in_array($user->id, [$stockOpnameSession->outgoing_user_id, $stockOpnameSession->incoming_user_id], true)) {

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class TransactionController extends Controller
@@ -16,6 +17,8 @@ class TransactionController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        Gate::authorize('viewAny', Transaction::class);
+
         $validated = $request->validate([
             'outlet_id' => ['sometimes', 'integer', Rule::exists('outlets', 'id')],
             'shift_id' => ['sometimes', 'integer', Rule::exists('shifts', 'id')],
@@ -36,6 +39,8 @@ class TransactionController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        Gate::authorize('create', Transaction::class);
+
         $validated = $request->validate([
             'client_uuid' => ['required', 'uuid'],
             'outlet_id' => ['required', 'integer', Rule::exists('outlets', 'id')],
@@ -66,6 +71,8 @@ class TransactionController extends Controller
      */
     public function show(Transaction $transaction): JsonResponse
     {
+        Gate::authorize('view', $transaction);
+
         return response()->json(['data' => $transaction->load('category')]);
     }
 }

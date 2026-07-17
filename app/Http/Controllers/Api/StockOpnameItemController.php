@@ -9,6 +9,7 @@ use App\Models\StockOpnameItem;
 use App\Models\StockOpnameSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class StockOpnameItemController extends Controller
@@ -18,6 +19,8 @@ class StockOpnameItemController extends Controller
      */
     public function index(StockOpnameSession $stockOpnameSession): JsonResponse
     {
+        Gate::authorize('view', $stockOpnameSession);
+
         return response()->json([
             'data' => $stockOpnameSession->items()->orderBy('section')->get(),
         ]);
@@ -29,6 +32,8 @@ class StockOpnameItemController extends Controller
      */
     public function store(Request $request, StockOpnameSession $stockOpnameSession): JsonResponse
     {
+        Gate::authorize('addItem', $stockOpnameSession);
+
         abort_if(
             $stockOpnameSession->status === OpnameSessionStatus::Final,
             422,
@@ -65,6 +70,8 @@ class StockOpnameItemController extends Controller
      */
     public function destroy(StockOpnameSession $stockOpnameSession, StockOpnameItem $item): JsonResponse
     {
+        Gate::authorize('addItem', $stockOpnameSession);
+
         abort_if(
             $stockOpnameSession->status === OpnameSessionStatus::Final,
             422,

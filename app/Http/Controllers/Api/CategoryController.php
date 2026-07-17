@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Category;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class CategoryController extends Controller
@@ -15,6 +16,8 @@ class CategoryController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        Gate::authorize('viewAny', Category::class);
+
         $validated = $request->validate([
             'outlet_id' => ['sometimes', 'integer', Rule::exists('outlets', 'id')],
         ]);
@@ -32,6 +35,8 @@ class CategoryController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        Gate::authorize('create', Category::class);
+
         $validated = $request->validate([
             'outlet_id' => ['required', 'integer', Rule::exists('outlets', 'id')],
             'name' => ['required', 'string', 'max:255'],
@@ -50,6 +55,8 @@ class CategoryController extends Controller
      */
     public function show(Category $category): JsonResponse
     {
+        Gate::authorize('view', $category);
+
         return response()->json(['data' => $category]);
     }
 
@@ -58,6 +65,8 @@ class CategoryController extends Controller
      */
     public function update(Request $request, Category $category): JsonResponse
     {
+        Gate::authorize('update', $category);
+
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'default_price' => ['sometimes', 'integer', 'min:0'],
@@ -76,6 +85,8 @@ class CategoryController extends Controller
      */
     public function destroy(Category $category): JsonResponse
     {
+        Gate::authorize('delete', $category);
+
         $category->delete();
 
         return response()->json(status: 204);

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ReconciliationStatus;
+use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Database\Factories\CashReconciliationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -33,6 +34,7 @@ use Illuminate\Support\Carbon;
 ])]
 class CashReconciliation extends Model
 {
+    use Auditable;
     use BelongsToTenant;
 
     /** @use HasFactory<CashReconciliationFactory> */

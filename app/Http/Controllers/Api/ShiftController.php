@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Shift;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class ShiftController extends Controller
@@ -16,6 +17,8 @@ class ShiftController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        Gate::authorize('viewAny', Shift::class);
+
         $validated = $request->validate([
             'outlet_id' => ['sometimes', 'integer', Rule::exists('outlets', 'id')],
         ]);
@@ -34,6 +37,8 @@ class ShiftController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        Gate::authorize('create', Shift::class);
+
         $validated = $request->validate([
             'client_uuid' => ['required', 'uuid'],
             'outlet_id' => ['required', 'integer', Rule::exists('outlets', 'id')],
@@ -54,6 +59,8 @@ class ShiftController extends Controller
      */
     public function show(Shift $shift): JsonResponse
     {
+        Gate::authorize('view', $shift);
+
         return response()->json([
             'data' => $shift->load('cashReconciliation'),
         ]);
@@ -64,6 +71,8 @@ class ShiftController extends Controller
      */
     public function update(Request $request, Shift $shift): JsonResponse
     {
+        Gate::authorize('update', $shift);
+
         $validated = $request->validate([
             'status' => ['required', Rule::enum(ShiftStatus::class)],
             'ended_at' => ['required_if:status,closed', 'nullable', 'date'],

@@ -344,54 +344,23 @@ Kesimpulannya sama seperti sebelumnya, tapi sekarang dengan bukti lebih konkret:
 **Langkah berikutnya yang disarankan:** validasi PRD ini ke 3–5 juragan warung Madura nyata sebelum mulai development V2 — khususnya soal kesediaan bayar dan reaksi mereka terhadap fitur opname multi-mode & rating dua arah.
 
 
-Ide
-apakah jika ada ai akan tetap cepat atau malah akan delay yang lama untuk prosesnya, atau pendekatan seperti pesan suara saja seperti whatsapp untuk menagani banyak pembeli, jadi nanti jika terdapat banyak pembeli bisa langsung klik ikon suara lalu berikan apa saja yang dibbeli, setela itu baru klik lagi untuk pembeli lainnya dan setiap suara yang sudah disimpan bisa langsung di proses dengan mengkliknya dan nantinya sat di proses akan muncul popup produk yang sesuai dengan suara gitu. bagaimana menurutmu
+# Adopsi Rancangan Fitur: Voice Queue (Antrean Suara) & AI Parser
 
-Ide pendekatan **antrean pesan suara (Voice Queue)** yang Anda usulkan ini **sangat brilian dan jauh lebih realistis untuk kondisi lapangan warung Madura!**
+Fitur pencatatan transaksi menggunakan suara (voice-first input) pada aplikasi PWA penjaga warung mengadopsi mekanisme **Antrean Suara (Voice Queue)** untuk meminimalkan delay saat melayani pembeli di jam sibuk dan meningkatkan ketahanan offline (offline-first).
 
-Ini adalah solusi UX (User Experience) tingkat lanjut yang memecahkan masalah performa, koneksi internet, dan kesibukan penjaga sekaligus. 
+## 1. Mekanisme Antrean Suara (Voice Queue)
+* **Rekam & Simpan Instan**: Saat warung ramai, penjaga merekam ucapan belanjaan pembeli (misal: "Surya satu bungkus, bensin dua liter") dan langsung menyimpannya. Rekaman audio disimpan secara lokal di device (IndexedDB PWA) sebagai kartu antrean (**Voice Note Cards**). Penjaga dapat langsung melayani pembeli berikutnya tanpa menunggu proses AI selesai.
+* **Pemrosesan Asinkron di Background**: Begitu suara disimpan, aplikasi mengirimkan audio secara asinkron ke server untuk ditranskripsikan (Speech-to-Text) dan di-parse oleh AI (LLM Parser). Setelah data produk dan harga berhasil diekstrak, kartu antrean di layar berubah status menjadi siap tinjau (centang hijau).
+* **Popup Verifikasi Manual (Safety Guard)**: Ketika penjaga mengetuk kartu antrean yang siap, sistem memunculkan popup berisi ringkasan barang belanjaan, total harga, dan pilihan metode pembayaran. Penjaga dapat mengoreksi data sebelum menekan tombol "Bayar" untuk mencegah data kas/stok kacau akibat kesalahan dengar AI.
 
-Berikut adalah analisis mengapa ide Anda sangat bagus dan perbandingannya dengan sistem *real-time*:
+## 2. Penanganan Edge Cases (Masalah Lupa Uang Bayar & Skenario Hutang/Bon)
+Untuk memecahkan masalah lupa nominal uang bayar saat melayani banyak pembeli sekaligus dan mendukung transaksi hutang (bon), sistem menetapkan aturan berikut:
 
----
-
-### Perbandingan UX: Real-Time vs Antrean Suara (Voice Queue)
-
-| Aspek | Pendekatan Real-Time | Pendekatan Antrean Suara (Usulan Anda) |
-| :--- | :--- | :--- |
-| **Kecepatan saat Ramai** | **Lambat.** Penjaga harus menunggu AI memproses (~1.5–3 detik) sebelum bisa melayani pembeli berikutnya. Jika internet lemot, antrean pembeli akan menumpuk. | **Sangat Cepat.** Penjaga hanya rekam 2 detik, simpan ke antrean lokal, dan langsung bisa melayani/merekam pembeli berikutnya. |
-| **Ketergantungan Internet** | **Sangat Tinggi.** Jika koneksi terputus, fitur input suara langsung tidak bisa digunakan sama sekali. | **Aman (Offline-First).** Rekaman suara disimpan sebagai file audio lokal di browser (IndexedDB PWA). Begitu internet stabil, PWA mengirimkannya ke API untuk diproses. |
-| **Akurasi & Kontrol** | **Rendah.** Jika AI salah dengar (misal "Surya dua" didengar "Surya muda"), transaksi langsung masuk dan data kas/stok menjadi kacau tanpa disadari penjaga. | **Tinggi (Ada Verifikasi).** Saat antrean diklik, muncul popup hasil parse AI. Penjaga bisa mengoreksi jumlah/kategori jika AI salah dengar sebelum mengklik tombol **"Bayar"**. |
-
----
-
-### Bagaimana Cara Kerja Teknis Terbaik untuk Ide Anda?
-
-Untuk mengimplementasikan ide ini tanpa membuat server Anda berat, kita bisa menggunakan teknik **Background Processing**:
-
-1. **Rekam & Antre (Instant)**:
-   * Pembeli A datang $\rightarrow$ Penjaga klik mikrofon, bicara, klik simpan $\rightarrow$ Muncul kartu **"Antrean 1"** (menyimpan audio lokal).
-   * Pembeli B datang $\rightarrow$ Lakukan hal yang sama $\rightarrow$ Muncul kartu **"Antrean 2"**.
-2. **Proses di Background (Asinkron)**:
-   * Begitu tombol "Simpan" diklik, aplikasi PWA di latar belakang langsung mengirim audio ke server untuk di-parse oleh AI.
-   * Saat proses AI selesai (misal butuh 2 detik), kartu **"Antrean 1"** berubah warna atau memunculkan ikon centang hijau $\rightarrow$ menandakan **"Data Siap Ditinjau"**.
-3. **Eksekusi Pembayaran**:
-   * Saat penjaga punya waktu luang, dia tinggal mengetuk kartu **"Antrean 1"**.
-   * Popup langsung muncul menampilkan: 
-     * *Rokok Surya (2 bungkus) - Rp60.000*
-     * *Aqua Dingin (1 botol) - Rp5.000*
-     * **Total: Rp65.000**
-   * Penjaga tinggal klik **"Bayar"**, masukkan uang yang diterima, selesai!
-
----
-
-### Apakah Backend Sudah Mendukung Ini?
-
-Secara arsitektur, backend yang kita bangun saat ini **sudah sangat kompatibel** karena:
-1. Endpoint transaksi kita bersifat **idempotent** menggunakan `client_uuid` (untuk mencegah transaksi ganda jika dikirim ulang).
-2. Data yang masuk tetap menggunakan format terstruktur yang sama.
-
-Jika nanti Anda masuk ke tahap development frontend/PWA (V2/V3), kita hanya perlu menambahkan satu endpoint sederhana di backend:
-* **`POST /api/voice/parse`**: Endpoint ini menerima file audio rekaman, mengirimkannya ke Whisper/Gemini API, lalu mengembalikan JSON hasil konversi teks ke produk/kategori. Data audio ini tidak perlu disimpan permanen di database server (bisa langsung dihapus setelah di-parse untuk menghemat storage).
-
-Apakah konsep alur kerja antrean suara (Voice Queue) dengan verifikasi popup ini yang akan kita jadikan acuan untuk development frontend nanti?
+* **Spoken Payment (Menyebutkan Nominal Bayar dalam Suara)**:
+  * Penjaga diimbau menyebutkan uang yang diserahkan pembeli di akhir ucapan. Contoh: *"Surya satu, aqua dingin satu, **bayar seratus ribu**"*.
+  * AI parser akan mendeteksi nominal tersebut, sehingga saat kartu antrean dibuka, kolom input "Uang Diterima" pada popup konfirmasi sudah terisi otomatis (Rp100.000) dan kembalian (Rp65.000) langsung ditampilkan. Penjaga tidak perlu lagi mengingat pembeli tadi menyerahkan uang pecahan berapa.
+* **Mekanisme Hold / Tahan Transaksi & Integrasi Bon**:
+  * Pada popup konfirmasi, disediakan tiga opsi tindakan:
+    1. **`[Bayar Tunai]`**: Membuka laci kas virtual dengan tombol nominal cepat (`Uang Pas`, `10k`, `20k`, `50k`, `100k`) untuk langsung melunasi transaksi.
+    2. **`[Simpan sebagai Bon (Piutang)]`**: Jika pembeli ingin berhutang, penjaga dapat langsung mengalihkan transaksi ini ke modul Bon Pelanggan dengan memilih nama/panggilan pelanggan yang berhutang (sesuai PRD §6.5).
+    3. **`[Tahan Transaksi / Hold]`**: Jika pembeli belum menyerahkan uang atau masih ingin mengambil barang lain, transaksi dipindahkan dari antrean suara ke daftar "Transaksi Aktif (Hold)" di pojok layar kasir untuk diselesaikan nanti setelah pembeli siap membayar.

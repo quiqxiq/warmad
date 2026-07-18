@@ -4,9 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\ShiftStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreShiftRequest;
+use App\Models\Outlet;
 use App\Models\Shift;
+use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
@@ -19,11 +24,15 @@ class ShiftController extends Controller
     {
         Gate::authorize('viewAny', Shift::class);
 
+        /** @var User $user */
+        $user = $request->user();
+        $accessibleOutletIds = Outlet::query()->accessibleTo($user)->pluck('id');
         $validated = $request->validate([
-            'outlet_id' => ['sometimes', 'integer', Rule::exists('outlets', 'id')],
+            'outlet_id' => ['sometimes', 'integer', Rule::in($accessibleOutletIds)],
         ]);
 
         $shifts = Shift::query()
+            ->whereIn('outlet_id', $accessibleOutletIds)
             ->when($validated['outlet_id'] ?? null, fn ($query, $outletId) => $query->where('outlet_id', $outletId))
             ->latest('started_at')
             ->paginate();
@@ -35,23 +44,39 @@ class ShiftController extends Controller
      * Start a new shift. Idempotent on client_uuid for offline retry
      * safety (PRD §8.3).
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreShiftRequest $request): JsonResponse
     {
-        Gate::authorize('create', Shift::class);
+        /** @var User $user */
+        $user = $request->user();
+        $payload = $request->payload();
+        $created = false;
 
-        $validated = $request->validate([
-            'client_uuid' => ['required', 'uuid'],
-            'outlet_id' => ['required', 'integer', Rule::exists('outlets', 'id')],
-            'opening_cash' => ['required', 'integer', 'min:0'],
-            'started_at' => ['required', 'date'],
-        ]);
+        $shift = DB::transaction(function () use ($payload, $user, &$created): Shift {
+            Tenant::query()
+                ->whereKey($user->tenant_id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $shift = Shift::updateOrCreate(
-            ['client_uuid' => $validated['client_uuid']],
-            [...$validated, 'user_id' => $request->user()->id, 'status' => ShiftStatus::Active],
-        );
+            $existingShift = Shift::query()
+                ->where('tenant_id', $user->tenant_id)
+                ->where('client_uuid', $payload['client_uuid'])
+                ->first();
 
-        return response()->json(['data' => $shift], $shift->wasRecentlyCreated ? 201 : 200);
+            if ($existingShift !== null) {
+                return $existingShift;
+            }
+
+            $created = true;
+
+            return Shift::create([
+                ...$payload,
+                'tenant_id' => $user->tenant_id,
+                'user_id' => $user->id,
+                'status' => ShiftStatus::Active,
+            ]);
+        }, attempts: 3);
+
+        return response()->json(['data' => $shift], $created ? 201 : 200);
     }
 
     /**
@@ -64,22 +89,5 @@ class ShiftController extends Controller
         return response()->json([
             'data' => $shift->load('cashReconciliation'),
         ]);
-    }
-
-    /**
-     * Close the specified shift.
-     */
-    public function update(Request $request, Shift $shift): JsonResponse
-    {
-        Gate::authorize('update', $shift);
-
-        $validated = $request->validate([
-            'status' => ['required', Rule::enum(ShiftStatus::class)],
-            'ended_at' => ['required_if:status,closed', 'nullable', 'date'],
-        ]);
-
-        $shift->update($validated);
-
-        return response()->json(['data' => $shift]);
     }
 }

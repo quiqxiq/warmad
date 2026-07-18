@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\Auth\OtpController;
+use App\Http\Controllers\Api\Auth\RegisterController;
 use App\Http\Controllers\Api\CashReconciliationController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\DebtController;
+use App\Http\Controllers\Api\DebtPaymentController;
 use App\Http\Controllers\Api\OutletController;
 use App\Http\Controllers\Api\ShiftController;
 use App\Http\Controllers\Api\StockOpnameItemController;
@@ -18,6 +20,13 @@ Route::post('auth/otp/verify', [OtpController::class, 'verify'])
     ->middleware('throttle:10,1')
     ->name('api.auth.otp.verify');
 
+Route::post('auth/register/request-otp', [RegisterController::class, 'requestOtp'])
+    ->middleware('throttle:10,1')
+    ->name('api.auth.register.request-otp');
+Route::post('auth/register/verify', [RegisterController::class, 'verify'])
+    ->middleware('throttle:10,1')
+    ->name('api.auth.register.verify');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('user', function (Request $request) {
         return $request->user();
@@ -25,19 +34,20 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::apiResource('outlets', OutletController::class);
     Route::apiResource('categories', CategoryController::class);
-    Route::apiResource('shifts', ShiftController::class)->except('destroy');
+    Route::apiResource('shifts', ShiftController::class)->only(['index', 'store', 'show']);
     Route::post('transactions/batch', [TransactionController::class, 'storeBatch'])
         ->name('api.transactions.batch-store');
-    Route::apiResource('transactions', TransactionController::class)->only(['index', 'store', 'show']);
+    Route::apiResource('transactions', TransactionController::class)->only(['index', 'show']);
     Route::apiResource('cash-reconciliations', CashReconciliationController::class)->only(['index', 'store', 'show']);
     Route::apiResource('debts', DebtController::class)
-        ->except('destroy')
+        ->only(['index', 'store', 'show'])
         ->names([
             'index' => 'api.debts.index',
             'store' => 'api.debts.store',
             'show' => 'api.debts.show',
-            'update' => 'api.debts.update',
         ]);
+    Route::post('debts/{debt}/payments', [DebtPaymentController::class, 'store'])
+        ->name('api.debts.payments.store');
 
     Route::apiResource('stock-opname-sessions', StockOpnameSessionController::class)->except('destroy');
     Route::post('stock-opname-sessions/{stock_opname_session}/confirm', [StockOpnameSessionController::class, 'confirm'])
@@ -50,5 +60,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('stock-opname-sessions/{stock_opname_session}/items/{item}', [StockOpnameItemController::class, 'destroy'])
         ->name('stock-opname-sessions.items.destroy');
 
-    Route::post('voice/parse', [VoiceParserController::class, 'parse'])->name('api.voice.parse');
+    Route::post('voice/parse', [VoiceParserController::class, 'parse'])
+        ->middleware('throttle:voice-parse')
+        ->name('api.voice.parse');
 });

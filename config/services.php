@@ -44,4 +44,15 @@ return [
         'token' => env('FONNTE_TOKEN'),
     ],
 
+    'voice' => [
+        // "mock" (local/testing fixture parser), "gemini" (Google Gemini LLM),
+        // or unset to fail closed in production (see AppServiceProvider).
+        'driver' => env('VOICE_PARSER_DRIVER'),
+    ],
+
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
+    ],
+
 ];

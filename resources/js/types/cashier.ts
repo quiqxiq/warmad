@@ -55,8 +55,16 @@ export type SaleDraft = {
     paymentAmount: number;
     customerName: string;
     note: string;
+    // Capture-time occurrence timestamp (recording/creation time), never review time.
     occurredAt: string;
+    // Outlet and shift active when the sale was captured. Submission is attributed
+    // to these, not whichever shift happens to be active at review time.
+    originOutletId?: number;
+    originShiftId?: number | null;
     sourceVoiceNoteId?: string;
+    // True when the spoken payment amount could not be heard. The cashier must
+    // confirm the amount before the sale can be recorded (no silent full-paid).
+    paymentUnknown?: boolean;
 };
 
 export type BatchTransactionItem = {
@@ -75,6 +83,22 @@ export type BatchTransactionPayload = {
     input_method: InputMethod;
     note: string | null;
     occurred_at: string;
+};
+
+export type ReconciliationStatus =
+    'auto_approved' | 'needs_explanation' | 'explained';
+
+export type CashReconciliation = {
+    id: number;
+    client_uuid: string;
+    outlet_id: number;
+    shift_id: number;
+    expected_cash: number;
+    actual_cash: number;
+    difference: number;
+    status: ReconciliationStatus;
+    note: string | null;
+    reconciled_at: string;
 };
 
 export type CashierPageProps = {

@@ -84,6 +84,18 @@ class StoreTransactionBatchRequest extends FormRequest
 
                 /** @var TransactionBatchPayload $data */
                 $data = $validator->validated();
+                /** @var User|null $user */
+                $user = $this->user();
+                $tenantId = $user?->tenant_id;
+                $existingSale = Transaction::query()
+                    ->where('tenant_id', $tenantId)
+                    ->where('sale_uuid', $data['client_uuid'])
+                    ->exists();
+
+                if ($existingSale) {
+                    return;
+                }
+
                 $totalAmount = 0;
 
                 foreach ($data['items'] as $item) {
@@ -99,9 +111,6 @@ class StoreTransactionBatchRequest extends FormRequest
                     );
                 }
 
-                /** @var User|null $user */
-                $user = $this->user();
-                $tenantId = $user?->tenant_id;
                 $outlet = $user === null
                     ? null
                     : Outlet::query()

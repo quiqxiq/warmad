@@ -7,6 +7,7 @@ export type UserOutletRole = {
 
 export type User = {
     id: number;
+    tenant_id: number | null;
     name: string;
     email: string;
     avatar?: string;

@@ -16,6 +16,11 @@ type DebtsIndexProps = {
     outlets: Outlet[];
     selectedOutlet: Outlet | null;
     debts: Debt[];
+    summary: {
+        outstanding_amount: number;
+        unpaid_count: number;
+        paid_count: number;
+    };
 };
 
 const statusDetails: Record<
@@ -27,7 +32,7 @@ const statusDetails: Record<
         className: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
         icon: Clock3,
     },
-    partial: {
+    partially_paid: {
         label: 'Sebagian',
         className:
             'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
@@ -53,8 +58,14 @@ function formatDebtDate(date: string): string {
     }).format(new Date(date));
 }
 
-function DebtStatusBadge({ status }: { status: DebtStatus }) {
-    const detail = statusDetails[status];
+const unknownStatusDetails = {
+    label: 'Tidak diketahui',
+    className: 'bg-muted text-muted-foreground',
+    icon: Clock3,
+};
+
+function DebtStatusBadge({ status }: { status: string }) {
+    const detail = statusDetails[status as DebtStatus] ?? unknownStatusDetails;
     const Icon = detail.icon;
 
     return (
@@ -71,14 +82,8 @@ export default function DebtsIndex({
     outlets,
     selectedOutlet,
     debts,
+    summary,
 }: DebtsIndexProps) {
-    const totalOutstanding = debts.reduce(
-        (sum, debt) => sum + remainingDebt(debt),
-        0,
-    );
-    const unpaidCount = debts.filter((debt) => debt.status === 'unpaid').length;
-    const paidCount = debts.filter((debt) => debt.status === 'paid').length;
-
     const changeOutlet = (value: string) => {
         router.visit(
             value === 'all'
@@ -130,7 +135,7 @@ export default function DebtsIndex({
                                 Total belum tertagih
                             </p>
                             <p className="mt-1 text-2xl font-black text-amber-700 dark:text-amber-300">
-                                {formatRupiah(totalOutstanding)}
+                                {formatRupiah(summary.outstanding_amount)}
                             </p>
                         </div>
                         <div className="bg-card p-5">
@@ -138,7 +143,7 @@ export default function DebtsIndex({
                                 Bon belum dibayar
                             </p>
                             <p className="mt-1 text-2xl font-black">
-                                {unpaidCount}
+                                {summary.unpaid_count}
                             </p>
                         </div>
                         <div className="bg-card p-5">
@@ -146,7 +151,7 @@ export default function DebtsIndex({
                                 Bon lunas
                             </p>
                             <p className="mt-1 text-2xl font-black text-emerald-700 dark:text-emerald-300">
-                                {paidCount}
+                                {summary.paid_count}
                             </p>
                         </div>
                     </div>

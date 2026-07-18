@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Models\CashReconciliation;
+use App\Models\Outlet;
 use App\Models\User;
 
 /**
@@ -13,16 +14,20 @@ class CashReconciliationPolicy
 {
     public function viewAny(User $user): bool
     {
-        return true;
+        return $user->tenant_id !== null;
     }
 
     public function view(User $user, CashReconciliation $cashReconciliation): bool
     {
-        return true;
+        return $user->tenant_id !== null
+            && Outlet::query()
+                ->accessibleTo($user)
+                ->whereKey($cashReconciliation->outlet_id)
+                ->exists();
     }
 
     public function create(User $user): bool
     {
-        return true;
+        return $user->tenant_id !== null;
     }
 }

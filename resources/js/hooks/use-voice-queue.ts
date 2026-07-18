@@ -1,3 +1,4 @@
+import { usePage } from '@inertiajs/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { parse } from '@/actions/App/Http/Controllers/Api/VoiceParserController';
 import { useNetworkStatus } from '@/hooks/use-network-status';
@@ -8,10 +9,18 @@ import {
     getVoiceNotes,
     OFFLINE_DATABASE_EVENT,
     OFFLINE_DATABASE_STORES,
-    putVoiceNote,
+    putVoiceNote
+    
 } from '@/lib/offline-database';
+import type {OfflineStorageEventDetail} from '@/lib/offline-database';
+import {
+    getOfflineOwner,
+    isSameOfflineOwner,
+    offlineOwnerKey,
+} from '@/lib/offline-owner';
 import { createUuid } from '@/lib/uuid';
 import type {
+    OfflineOwner,
     VoiceNote,
     VoiceParseData,
     VoiceParseResponse,
@@ -23,6 +32,7 @@ type EnqueueVoiceNote = {
     blob: Blob;
     durationMs: number;
     mimeType: string;
+    shiftId: number | null;
 };
 
 const processableStatuses: VoiceQueueStatus[] = [
@@ -32,7 +42,10 @@ const processableStatuses: VoiceQueueStatus[] = [
     'processing',
 ];
 
-let voiceWorkerPromise: Promise<void> | null = null;
+const voiceWorkers = new Map<
+    string,
+    { controller: AbortController; promise: Promise<void> }
+>();
 
 function needsReview(result: VoiceParseData): boolean {
     return (
@@ -52,7 +65,11 @@ function getAudioExtension(mimeType: string): string {
     return mimeType.includes('ogg') ? 'ogg' : 'webm';
 }
 
-async function processVoiceNote(note: VoiceNote): Promise<void> {
+async function processVoiceNote(
+    owner: OfflineOwner,
+    note: VoiceNote,
+    signal: AbortSignal,
+): Promise<void> {
     const now = new Date().toISOString();
     const uploadingNote: VoiceNote = {
         ...note,
@@ -62,7 +79,7 @@ async function processVoiceNote(note: VoiceNote): Promise<void> {
         error: undefined,
     };
 
-    await putVoiceNote(uploadingNote);
+    await putVoiceNote(owner, uploadingNote);
 
     try {
         const formData = new FormData();
@@ -76,6 +93,7 @@ async function processVoiceNote(note: VoiceNote): Promise<void> {
         const response = await apiRequest<VoiceParseResponse>(
             parse(),
             formData,
+            signal,
         );
         const processingNote: VoiceNote = {
             ...uploadingNote,
@@ -83,15 +101,19 @@ async function processVoiceNote(note: VoiceNote): Promise<void> {
             updatedAt: new Date().toISOString(),
         };
 
-        await putVoiceNote(processingNote);
-        await putVoiceNote({
+        await putVoiceNote(owner, processingNote);
+        await putVoiceNote(owner, {
             ...processingNote,
             status: needsReview(response.data) ? 'needs_review' : 'ready',
             result: response.data,
             updatedAt: new Date().toISOString(),
         });
     } catch (error) {
-        await putVoiceNote({
+        if (signal.aborted) {
+            return;
+        }
+
+        await putVoiceNote(owner, {
             ...uploadingNote,
             status: isNetworkError(error) ? 'waiting_network' : 'failed',
             error: getRequestErrorMessage(error),
@@ -100,9 +122,16 @@ async function processVoiceNote(note: VoiceNote): Promise<void> {
     }
 }
 
-async function runVoiceWorker(): Promise<void> {
-    while (typeof navigator !== 'undefined' && navigator.onLine) {
-        const notes = await getVoiceNotes();
+async function runVoiceWorker(
+    owner: OfflineOwner,
+    signal: AbortSignal,
+): Promise<void> {
+    while (
+        typeof navigator !== 'undefined' &&
+        navigator.onLine &&
+        !signal.aborted
+    ) {
+        const notes = await getVoiceNotes(owner);
         const nextNote = notes
             .filter((note) => processableStatuses.includes(note.status))
             .sort((left, right) =>
@@ -113,9 +142,9 @@ async function runVoiceWorker(): Promise<void> {
             return;
         }
 
-        await processVoiceNote(nextNote);
+        await processVoiceNote(owner, nextNote, signal);
 
-        const updatedNote = await getVoiceNote(nextNote.id);
+        const updatedNote = await getVoiceNote(owner, nextNote.id);
 
         if (updatedNote?.status === 'waiting_network') {
             return;
@@ -123,19 +152,33 @@ async function runVoiceWorker(): Promise<void> {
     }
 }
 
-function startVoiceWorker(): Promise<void> {
-    if (voiceWorkerPromise) {
-        return voiceWorkerPromise;
+function startVoiceWorker(owner: OfflineOwner): Promise<void> {
+    const key = offlineOwnerKey(owner);
+    const existingWorker = voiceWorkers.get(key);
+
+    if (existingWorker) {
+        return existingWorker.promise;
     }
 
-    voiceWorkerPromise = runVoiceWorker().finally(() => {
-        voiceWorkerPromise = null;
+    const controller = new AbortController();
+    const promise = runVoiceWorker(owner, controller.signal).finally(() => {
+        voiceWorkers.delete(key);
     });
 
-    return voiceWorkerPromise;
+    voiceWorkers.set(key, { controller, promise });
+
+    return promise;
+}
+
+export function pauseVoiceWorker(owner: OfflineOwner): void {
+    const key = offlineOwnerKey(owner);
+    voiceWorkers.get(key)?.controller.abort();
+    voiceWorkers.delete(key);
 }
 
 export function useVoiceQueue(outletId: number | null) {
+    const { auth } = usePage().props;
+    const owner = useMemo(() => getOfflineOwner(auth), [auth]);
     const { isOnline } = useNetworkStatus();
     const [notes, setNotes] = useState<VoiceNote[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -150,24 +193,25 @@ export function useVoiceQueue(outletId: number | null) {
         }
 
         try {
-            setNotes(await getVoiceNotes(outletId));
+            setNotes(await getVoiceNotes(owner, outletId));
             setStorageError(null);
         } catch (error) {
             setStorageError(getRequestErrorMessage(error));
         } finally {
             setIsLoading(false);
         }
-    }, [outletId]);
+    }, [outletId, owner]);
 
     useEffect(() => {
         const initialRefresh = window.setTimeout(() => void refresh(), 0);
 
         const handleStorageChange = (event: Event) => {
-            const detail = (event as CustomEvent<{ store?: string }>).detail;
+            const detail = (event as CustomEvent<OfflineStorageEventDetail>)
+                .detail;
 
             if (
-                !detail?.store ||
-                detail.store === OFFLINE_DATABASE_STORES.voiceNotes
+                detail?.store === OFFLINE_DATABASE_STORES.voiceNotes &&
+                isSameOfflineOwner(owner, detail)
             ) {
                 void refresh();
             }
@@ -182,7 +226,7 @@ export function useVoiceQueue(outletId: number | null) {
                 handleStorageChange,
             );
         };
-    }, [refresh]);
+    }, [owner, refresh]);
 
     useEffect(() => {
         if (outletId === null) {
@@ -190,18 +234,18 @@ export function useVoiceQueue(outletId: number | null) {
         }
 
         if (isOnline) {
-            void startVoiceWorker();
+            void startVoiceWorker(owner);
 
             return;
         }
 
-        void getVoiceNotes(outletId)
+        void getVoiceNotes(owner, outletId)
             .then((storedNotes) =>
                 Promise.all(
                     storedNotes
                         .filter((note) => note.status === 'queued')
                         .map((note) =>
-                            putVoiceNote({
+                            putVoiceNote(owner, {
                                 ...note,
                                 status: 'waiting_network',
                                 updatedAt: new Date().toISOString(),
@@ -212,10 +256,10 @@ export function useVoiceQueue(outletId: number | null) {
             .catch((error: unknown) => {
                 setStorageError(getRequestErrorMessage(error));
             });
-    }, [isOnline, outletId]);
+    }, [isOnline, outletId, owner]);
 
     const enqueue = useCallback(
-        async ({ blob, durationMs, mimeType }: EnqueueVoiceNote) => {
+        async ({ blob, durationMs, mimeType, shiftId }: EnqueueVoiceNote) => {
             if (outletId === null) {
                 throw new Error('Pilih outlet sebelum merekam transaksi.');
             }
@@ -224,6 +268,7 @@ export function useVoiceQueue(outletId: number | null) {
             const note: VoiceNote = {
                 id: createUuid(),
                 outletId,
+                shiftId,
                 audio: blob,
                 mimeType,
                 durationMs,
@@ -231,28 +276,30 @@ export function useVoiceQueue(outletId: number | null) {
                 attempts: 0,
                 createdAt: now,
                 updatedAt: now,
+                saleUuid: createUuid(),
+                saleState: 'open',
             };
 
-            await putVoiceNote(note);
+            await putVoiceNote(owner, note);
 
             if (isOnline) {
-                void startVoiceWorker();
+                void startVoiceWorker(owner);
             }
 
             return note;
         },
-        [isOnline, outletId],
+        [isOnline, outletId, owner],
     );
 
     const retry = useCallback(
         async (id: string) => {
-            const note = await getVoiceNote(id);
+            const note = await getVoiceNote(owner, id);
 
             if (!note) {
                 return;
             }
 
-            await putVoiceNote({
+            await putVoiceNote(owner, {
                 ...note,
                 status: isOnline ? 'queued' : 'waiting_network',
                 error: undefined,
@@ -260,15 +307,18 @@ export function useVoiceQueue(outletId: number | null) {
             });
 
             if (isOnline) {
-                void startVoiceWorker();
+                void startVoiceWorker(owner);
             }
         },
-        [isOnline],
+        [isOnline, owner],
     );
 
-    const remove = useCallback(async (id: string) => {
-        await deleteVoiceNote(id);
-    }, []);
+    const remove = useCallback(
+        async (id: string) => {
+            await deleteVoiceNote(owner, id);
+        },
+        [owner],
+    );
 
     const counts = useMemo<VoiceQueueCounts>(() => {
         const initialCounts: VoiceQueueCounts = {

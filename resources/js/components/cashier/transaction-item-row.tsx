@@ -121,7 +121,7 @@ export function TransactionItemRow({
                             className="flex min-h-12 items-center justify-center border-r hover:bg-muted"
                             onClick={() =>
                                 onChange({
-                                    quantity: Math.max(0.01, item.quantity - 1),
+                                    quantity: Math.max(1, item.quantity - 1),
                                 })
                             }
                             aria-label="Kurangi jumlah"
@@ -131,15 +131,21 @@ export function TransactionItemRow({
                         <input
                             id={`quantity-${item.id}`}
                             type="number"
-                            inputMode="decimal"
-                            min="0.01"
-                            step="0.01"
+                            inputMode="numeric"
+                            min="1"
+                            step="1"
                             value={item.quantity}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                                const parsed = Math.floor(
+                                    Number(event.target.value),
+                                );
+
                                 onChange({
-                                    quantity: Number(event.target.value),
-                                })
-                            }
+                                    quantity: Number.isFinite(parsed)
+                                        ? Math.max(1, parsed)
+                                        : 1,
+                                });
+                            }}
                             className="min-h-12 min-w-0 bg-transparent px-1 text-center font-semibold outline-none"
                         />
                         <button

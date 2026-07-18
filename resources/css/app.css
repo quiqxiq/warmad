@@ -156,3 +156,104 @@
         font-size: 1rem;
     }
 }
+
+/* Landing page motion — respects prefers-reduced-motion */
+@layer utilities {
+    @keyframes lp-fade-up {
+        from {
+            opacity: 0;
+            transform: translateY(1.5rem);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes lp-float {
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+        50% {
+            transform: translateY(-0.5rem);
+        }
+    }
+
+    @keyframes lp-aurora {
+        0%,
+        100% {
+            transform: translate3d(0, 0, 0) scale(1);
+            opacity: 0.55;
+        }
+        50% {
+            transform: translate3d(3%, -4%, 0) scale(1.12);
+            opacity: 0.85;
+        }
+    }
+
+    @keyframes lp-marquee {
+        from {
+            transform: translateX(0);
+        }
+        to {
+            transform: translateX(-50%);
+        }
+    }
+
+    @keyframes lp-shimmer {
+        from {
+            background-position: 200% 0;
+        }
+        to {
+            background-position: -200% 0;
+        }
+    }
+
+    /* Scroll-reveal: hidden until .is-visible is toggled by an observer. */
+    .lp-reveal {
+        opacity: 0;
+        transform: translateY(1.5rem);
+        transition:
+            opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+            transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+        will-change: opacity, transform;
+    }
+
+    .lp-reveal.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .lp-float {
+        animation: lp-float 6s ease-in-out infinite;
+    }
+
+    .lp-aurora {
+        animation: lp-aurora 16s ease-in-out infinite;
+    }
+
+    .lp-marquee-track {
+        animation: lp-marquee 32s linear infinite;
+    }
+
+    .lp-shimmer {
+        background-size: 200% 100%;
+        animation: lp-shimmer 6s linear infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .lp-reveal {
+            opacity: 1;
+            transform: none;
+            transition: none;
+        }
+
+        .lp-float,
+        .lp-aurora,
+        .lp-marquee-track,
+        .lp-shimmer {
+            animation: none;
+        }
+    }
+}

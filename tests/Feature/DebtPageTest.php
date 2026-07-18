@@ -27,6 +27,7 @@ it('renders latest debts of every status for the selected accessible outlet', fu
         'tenant_id' => $tenant->id,
         'outlet_id' => $outlet->id,
         'customer_name' => 'Belum Bayar',
+        'amount' => 10_000,
         'status' => DebtStatus::Unpaid,
         'incurred_at' => today()->subDays(2),
     ]);
@@ -51,7 +52,7 @@ it('renders latest debts of every status for the selected accessible outlet', fu
     ]);
 
     $this->actingAs($owner)
-        ->get(route('debts.index', ['outlet' => $outlet->id]))
+        ->get(route('debts.index', ['outlet_id' => $outlet->id]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('debts/index')
@@ -61,6 +62,43 @@ it('renders latest debts of every status for the selected accessible outlet', fu
             ->where('debts.0.customer_name', 'Lunas')
             ->where('debts.0.status', DebtStatus::Paid->value)
             ->where('debts.1.status', DebtStatus::PartiallyPaid->value)
-            ->where('debts.2.status', DebtStatus::Unpaid->value),
+            ->where('debts.2.status', DebtStatus::Unpaid->value)
+            ->where('summary.outstanding_amount', 16_000)
+            ->where('summary.unpaid_count', 1)
+            ->where('summary.paid_count', 1),
+        );
+});
+
+it('shows all accessible outlets and calculates summary beyond the capped list', function () {
+    $tenant = Tenant::factory()->create();
+    $owner = User::factory()->create(['tenant_id' => $tenant->id]);
+    $owner->assignRole(OutletUserRole::Owner->value);
+    $firstOutlet = Outlet::factory()->create(['tenant_id' => $tenant->id]);
+    $secondOutlet = Outlet::factory()->create(['tenant_id' => $tenant->id]);
+
+    Debt::factory()->count(101)->create([
+        'tenant_id' => $tenant->id,
+        'outlet_id' => $firstOutlet->id,
+        'amount' => 100,
+        'paid_amount' => 0,
+        'status' => DebtStatus::Unpaid,
+    ]);
+    Debt::factory()->create([
+        'tenant_id' => $tenant->id,
+        'outlet_id' => $secondOutlet->id,
+        'amount' => 100,
+        'paid_amount' => 0,
+        'status' => DebtStatus::Unpaid,
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('debts.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selectedOutlet', null)
+            ->has('debts', 100)
+            ->where('summary.outstanding_amount', 10_200)
+            ->where('summary.unpaid_count', 102)
+            ->where('summary.paid_count', 0),
         );
 });

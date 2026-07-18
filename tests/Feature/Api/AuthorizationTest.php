@@ -20,6 +20,9 @@ beforeEach(function () {
 
     $this->otherPenjaga = User::factory()->create(['tenant_id' => $this->tenant->id]);
     $this->otherPenjaga->assignRole(OutletUserRole::Penjaga->value);
+
+    $this->penjaga->outlets()->attach($this->outlet, ['role' => OutletUserRole::Penjaga->value]);
+    $this->otherPenjaga->outlets()->attach($this->outlet, ['role' => OutletUserRole::Penjaga->value]);
 });
 
 it('allows owner to create category but denies penjaga', function () {
@@ -40,38 +43,20 @@ it('allows owner to create category but denies penjaga', function () {
     ])->assertCreated();
 });
 
-it('allows penjaga to update their own shift but denies updating others', function () {
-    $ownShift = Shift::factory()->create([
+it('requires reconciliation instead of direct shift closure', function () {
+    $shift = Shift::factory()->create([
         'tenant_id' => $this->tenant->id,
         'outlet_id' => $this->outlet->id,
         'user_id' => $this->penjaga->id,
         'status' => ShiftStatus::Active,
     ]);
 
-    $otherShift = Shift::factory()->create([
-        'tenant_id' => $this->tenant->id,
-        'outlet_id' => $this->outlet->id,
-        'user_id' => $this->otherPenjaga->id,
-        'status' => ShiftStatus::Active,
-    ]);
-
-    // 1. Authenticate as Penjaga updating own shift -> Allowed
     Sanctum::actingAs($this->penjaga);
-    $this->putJson("/api/shifts/{$ownShift->id}", [
-        'status' => ShiftStatus::Closed->value,
-        'ended_at' => now()->toIso8601String(),
-    ])->assertOk();
 
-    // 2. Authenticate as Penjaga updating another shift -> Denied
-    $this->putJson("/api/shifts/{$otherShift->id}", [
+    $this->putJson("/api/shifts/{$shift->id}", [
         'status' => ShiftStatus::Closed->value,
         'ended_at' => now()->toIso8601String(),
-    ])->assertForbidden();
+    ])->assertMethodNotAllowed();
 
-    // 3. Authenticate as Owner updating another shift -> Allowed
-    Sanctum::actingAs($this->owner);
-    $this->putJson("/api/shifts/{$otherShift->id}", [
-        'status' => ShiftStatus::Closed->value,
-        'ended_at' => now()->toIso8601String(),
-    ])->assertOk();
+    expect($shift->refresh()->status)->toBe(ShiftStatus::Active);
 });

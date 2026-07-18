@@ -41,14 +41,16 @@ it('can request and verify OTP successfully', function () {
 
     expect($code)->not->toBeNull();
 
-    // 2. Verify OTP
-    $response = $this->postJson('/api/auth/otp/verify', [
-        'phone' => '081234567890',
-        'code' => $code,
-    ])->assertOk();
+    // 2. Verify OTP (stateful, same-origin — as the SPA sends it)
+    $response = $this->withHeader('Origin', config('app.url'))
+        ->postJson('/api/auth/otp/verify', [
+            'phone' => '081234567890',
+            'code' => $code,
+        ])->assertOk();
 
-    $response->assertJsonStructure(['token', 'user']);
+    $response->assertJsonStructure(['token', 'user', 'redirect']);
     expect($this->user->fresh()->phone_verified_at)->not->toBeNull();
+    $this->assertAuthenticatedAs($this->user);
 });
 
 it('rejects expired OTP', function () {

@@ -171,6 +171,8 @@ export function TransactionReviewSheet({
                 item.unit_price < 0,
         );
     const isCustomerMissing = requiresCustomer && !draft?.customerName.trim();
+    const isPaymentUnknown =
+        (draft?.paymentUnknown ?? false) && draft?.paymentMode !== 'hold';
 
     if (!draft) {
         return null;
@@ -233,6 +235,7 @@ export function TransactionReviewSheet({
         updateDraft({
             paymentMode,
             paymentAmount: nextPaymentAmount,
+            paymentUnknown: false,
         });
     };
 
@@ -405,6 +408,7 @@ export function TransactionReviewSheet({
                                                 paymentAmount: Number(
                                                     event.target.value,
                                                 ),
+                                                paymentUnknown: false,
                                             })
                                         }
                                         className="min-h-14 rounded-xl text-lg font-bold tabular-nums"
@@ -537,6 +541,13 @@ export function TransactionReviewSheet({
                                     Lengkapi semua kategori, jumlah, dan harga.
                                 </p>
                             )}
+                            {isPaymentUnknown && (
+                                <p className="flex items-center gap-2 text-xs font-semibold text-destructive">
+                                    <AlertTriangle className="size-4" /> Jumlah
+                                    pembayaran tidak terdengar. Konfirmasi uang
+                                    diterima sebelum menyimpan.
+                                </p>
+                            )}
                             <Button
                                 type="button"
                                 size="lg"
@@ -544,6 +555,7 @@ export function TransactionReviewSheet({
                                 disabled={
                                     hasInvalidItems ||
                                     isCustomerMissing ||
+                                    isPaymentUnknown ||
                                     isSubmitting
                                 }
                                 onClick={() => void onConfirm()}

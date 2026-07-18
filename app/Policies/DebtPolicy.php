@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Models\Debt;
+use App\Models\Outlet;
 use App\Models\User;
 
 /**
@@ -13,21 +14,27 @@ class DebtPolicy
 {
     public function viewAny(User $user): bool
     {
-        return true;
+        return $user->tenant_id !== null;
     }
 
     public function view(User $user, Debt $debt): bool
     {
-        return true;
+        return $this->canAccessOutlet($user, $debt->outlet_id);
     }
 
     public function create(User $user): bool
     {
-        return true;
+        return $user->tenant_id !== null;
     }
 
-    public function update(User $user, Debt $debt): bool
+    public function recordPayment(User $user, Debt $debt): bool
     {
-        return true;
+        return $this->canAccessOutlet($user, $debt->outlet_id);
+    }
+
+    private function canAccessOutlet(User $user, int $outletId): bool
+    {
+        return $user->tenant_id !== null
+            && Outlet::query()->accessibleTo($user)->whereKey($outletId)->exists();
     }
 }

@@ -161,7 +161,8 @@ return [
     */
 
     'features' => [
-        Features::registration(),
+        // Registration is handled by the phone + OTP owner-signup flow
+        // (App\Http\Controllers\Api\Auth\RegisterController), not Fortify.
         Features::resetPasswords(),
         Features::emailVerification(),
         Features::twoFactorAuthentication([

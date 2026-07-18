@@ -1,11 +1,12 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { MapPinOff, Store } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { MapPinOff, Scale, Store } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { store as storeShift } from '@/actions/App/Http/Controllers/Api/ShiftController';
 import { index as outletIndex } from '@/actions/App/Http/Controllers/OutletController';
 import { CashierHeader } from '@/components/cashier/cashier-header';
 import { CategoryGrid } from '@/components/cashier/category-grid';
+import { CloseShiftSheet } from '@/components/cashier/close-shift-sheet';
 import { HeldSalesPanel } from '@/components/cashier/held-sales-panel';
 import { StartShiftForm } from '@/components/cashier/start-shift-form';
 import { TransactionReviewSheet } from '@/components/cashier/transaction-review-sheet';
@@ -13,16 +14,20 @@ import { VoiceQueue } from '@/components/cashier/voice-queue';
 import { VoiceRecorder } from '@/components/cashier/voice-recorder';
 import { Button } from '@/components/ui/button';
 import { useNetworkStatus } from '@/hooks/use-network-status';
+import { useOfflineReconciliations } from '@/hooks/use-offline-reconciliations';
 import { useOfflineSales } from '@/hooks/use-offline-sales';
 import { useVoiceQueue } from '@/hooks/use-voice-queue';
 import { apiRequest, getRequestErrorMessage } from '@/lib/api';
 import {
+    claimVoiceNoteForSale,
     deleteHeldSale,
     getHeldSales,
     OFFLINE_DATABASE_EVENT,
     OFFLINE_DATABASE_STORES,
     putHeldSale,
+    setVoiceNoteSaleState,
 } from '@/lib/offline-database';
+import { getOfflineOwner } from '@/lib/offline-owner';
 import { createUuid } from '@/lib/uuid';
 import { index as cashierIndex } from '@/routes/cashier';
 import type {
@@ -30,10 +35,81 @@ import type {
     CashierPageProps,
     Category,
     HeldSale,
+    OfflineOwner,
+    ReconciliationPayload,
     SaleDraft,
     Shift,
     VoiceNote,
 } from '@/types';
+
+type PendingShiftStart = {
+    client_uuid: string;
+    outlet_id: number;
+    opening_cash: number;
+    started_at: string;
+};
+
+const pendingShiftStorageKey = (owner: OfflineOwner, outletId: number) =>
+    `warmad:pending-shift:${owner.tenantId}:${owner.userId}:${outletId}`;
+
+function getPendingShiftStart(
+    owner: OfflineOwner,
+    outletId: number,
+    openingCash: number,
+): PendingShiftStart {
+    const storageKey = pendingShiftStorageKey(owner, outletId);
+
+    try {
+        const stored = window.localStorage.getItem(storageKey);
+
+        if (stored) {
+            const pending = JSON.parse(stored) as Partial<PendingShiftStart>;
+
+            if (
+                pending.outlet_id === outletId &&
+                typeof pending.client_uuid === 'string' &&
+                typeof pending.opening_cash === 'number' &&
+                typeof pending.started_at === 'string'
+            ) {
+                return pending as PendingShiftStart;
+            }
+        }
+    } catch {
+        window.localStorage.removeItem(storageKey);
+    }
+
+    const pending: PendingShiftStart = {
+        client_uuid: createUuid(),
+        outlet_id: outletId,
+        opening_cash: openingCash,
+        started_at: new Date().toISOString(),
+    };
+
+    window.localStorage.setItem(storageKey, JSON.stringify(pending));
+
+    return pending;
+}
+
+function clearPendingShiftStart(
+    owner: OfflineOwner,
+    outletId: number,
+    clientUuid: string,
+) {
+    const storageKey = pendingShiftStorageKey(owner, outletId);
+
+    try {
+        const stored = window.localStorage.getItem(storageKey);
+        const pending = stored
+            ? (JSON.parse(stored) as Partial<PendingShiftStart>)
+            : null;
+
+        if (pending?.client_uuid === clientUuid) {
+            window.localStorage.removeItem(storageKey);
+        }
+    } catch {
+        window.localStorage.removeItem(storageKey);
+    }
+}
 
 function createManualDraft(category: Category): SaleDraft {
     return {
@@ -62,10 +138,13 @@ function createVoiceDraft(note: VoiceNote): SaleDraft | null {
         return null;
     }
 
+    const paymentUnknown = note.result.payment.received === null;
     const received = note.result.payment.received ?? note.result.total_amount;
 
     return {
-        clientUuid: createUuid(),
+        // Stable per-note sale UUID prevents a reopened note from spawning a
+        // second sale under a fresh identifier.
+        clientUuid: note.saleUuid ?? note.id,
         items: note.result.items.map((item) => ({
             id: createUuid(),
             category_id: item.category_id,
@@ -81,8 +160,12 @@ function createVoiceDraft(note: VoiceNote): SaleDraft | null {
         paymentAmount: Math.max(0, received),
         customerName: '',
         note: '',
-        occurredAt: new Date().toISOString(),
+        // Recording time, not review time, so the sale lands in the right period.
+        occurredAt: note.createdAt,
+        originOutletId: note.outletId,
+        originShiftId: note.shiftId,
         sourceVoiceNoteId: note.id,
+        paymentUnknown,
     };
 }
 
@@ -93,12 +176,15 @@ export default function CashierIndex({
     activeShift,
     stats,
 }: CashierPageProps) {
+    const { auth } = usePage().props;
+    const offlineOwner = useMemo(() => getOfflineOwner(auth), [auth]);
     const outletId = selectedOutlet?.id ?? null;
     const { isOnline } = useNetworkStatus();
     const voiceQueue = useVoiceQueue(outletId);
     const offlineSales = useOfflineSales(outletId ?? undefined);
     const [startedShift, setStartedShift] = useState<Shift | null>(null);
     const currentShift = startedShift ?? activeShift;
+    const offlineReconciliations = useOfflineReconciliations(currentShift?.id);
     const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
     const [draft, setDraft] = useState<SaleDraft | null>(null);
     const [reviewOpen, setReviewOpen] = useState(false);
@@ -107,7 +193,12 @@ export default function CashierIndex({
     );
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isStartingShift, setIsStartingShift] = useState(false);
+    const [closeShiftOpen, setCloseShiftOpen] = useState(false);
+    const [isClosingShift, setIsClosingShift] = useState(false);
     const reportedStorageErrorRef = useRef<string | null>(null);
+    // Set when a draft is held or submitted so closing the sheet doesn't release
+    // the voice-note claim we intentionally kept (held) or consumed (submitted).
+    const draftFinalizedRef = useRef(false);
 
     useEffect(() => {
         const storageError =
@@ -127,7 +218,7 @@ export default function CashierIndex({
         }
 
         try {
-            setHeldSales(await getHeldSales(outletId));
+            setHeldSales(await getHeldSales(offlineOwner, outletId));
         } catch (error) {
             const message = getRequestErrorMessage(error);
 
@@ -136,7 +227,7 @@ export default function CashierIndex({
                 toast.error(message);
             }
         }
-    }, [outletId]);
+    }, [offlineOwner, outletId]);
 
     useEffect(() => {
         const initialRefresh = window.setTimeout(
@@ -183,10 +274,21 @@ export default function CashierIndex({
         setIsStartingShift(true);
 
         try {
-            const response = await apiRequest<{ data?: Shift }>(storeShift(), {
-                outlet_id: selectedOutlet.id,
-                opening_cash: openingCash,
-            });
+            const pendingShift = getPendingShiftStart(
+                offlineOwner,
+                selectedOutlet.id,
+                openingCash,
+            );
+            const response = await apiRequest<{ data?: Shift }>(
+                storeShift(),
+                pendingShift,
+            );
+
+            clearPendingShiftStart(
+                offlineOwner,
+                selectedOutlet.id,
+                pendingShift.client_uuid,
+            );
 
             if (response?.data?.id) {
                 setStartedShift(response.data);
@@ -203,29 +305,74 @@ export default function CashierIndex({
     };
 
     const openManualReview = (category: Category) => {
-        setDraft(createManualDraft(category));
+        draftFinalizedRef.current = true;
+        setDraft({
+            ...createManualDraft(category),
+            originOutletId: selectedOutlet?.id,
+            originShiftId: currentShift?.id ?? null,
+        });
         setActiveHeldSaleId(null);
         setReviewOpen(true);
     };
 
-    const openVoiceReview = (note: VoiceNote) => {
-        const voiceDraft = createVoiceDraft(note);
-
-        if (!voiceDraft) {
+    const openVoiceReview = async (note: VoiceNote) => {
+        if (!note.result) {
             toast.error('Hasil suara belum siap ditinjau.');
 
             return;
         }
 
+        // Atomically claim the note so a reopen — in this tab or another — cannot
+        // start a second draft for the same recording.
+        const claimed = await claimVoiceNoteForSale(offlineOwner, note.id);
+
+        if (!claimed) {
+            toast.error(
+                'Catatan suara ini sedang ditinjau atau sudah tersimpan.',
+            );
+
+            return;
+        }
+
+        const voiceDraft = createVoiceDraft(claimed);
+
+        if (!voiceDraft) {
+            // Release the claim so the note can be retried later.
+            await setVoiceNoteSaleState(offlineOwner, note.id, 'open');
+            toast.error('Hasil suara belum siap ditinjau.');
+
+            return;
+        }
+
+        draftFinalizedRef.current = false;
         setDraft(voiceDraft);
         setActiveHeldSaleId(null);
         setReviewOpen(true);
     };
 
     const resumeHeldSale = (sale: HeldSale) => {
+        draftFinalizedRef.current = true;
         setDraft(sale.draft);
         setActiveHeldSaleId(sale.id);
         setReviewOpen(true);
+    };
+
+    // Release a voice-note claim when the sheet closes without the sale being
+    // held or submitted, returning the note to `open` for a later attempt.
+    const handleReviewOpenChange = (open: boolean) => {
+        if (
+            !open &&
+            !draftFinalizedRef.current &&
+            draft?.sourceVoiceNoteId
+        ) {
+            void setVoiceNoteSaleState(
+                offlineOwner,
+                draft.sourceVoiceNoteId,
+                'open',
+            );
+        }
+
+        setReviewOpen(open);
     };
 
     const handleHold = async () => {
@@ -237,10 +384,13 @@ export default function CashierIndex({
 
         try {
             const now = new Date().toISOString();
+            // A held voice sale keeps its note `claimed`, so reopening it resumes
+            // the same held draft rather than spawning a competing one.
+            draftFinalizedRef.current = true;
             const heldSale: HeldSale = {
                 id: activeHeldSaleId ?? createUuid(),
-                outletId: selectedOutlet.id,
-                shiftId: currentShift.id,
+                outletId: draft.originOutletId ?? selectedOutlet.id,
+                shiftId: draft.originShiftId ?? currentShift.id,
                 draft,
                 createdAt:
                     heldSales.find((sale) => sale.id === activeHeldSaleId)
@@ -248,7 +398,20 @@ export default function CashierIndex({
                 updatedAt: now,
             };
 
-            await putHeldSale(heldSale);
+            await putHeldSale(offlineOwner, heldSale);
+
+            // The held sale now owns this recording (stable UUID + origin shift),
+            // so retire the source note from the queue. It cannot be reviewed
+            // again to produce a competing draft.
+            if (draft.sourceVoiceNoteId) {
+                await setVoiceNoteSaleState(
+                    offlineOwner,
+                    draft.sourceVoiceNoteId,
+                    'consumed',
+                );
+                await voiceQueue.remove(draft.sourceVoiceNoteId);
+            }
+
             setReviewOpen(false);
             setDraft(null);
             setActiveHeldSaleId(null);
@@ -261,11 +424,21 @@ export default function CashierIndex({
     };
 
     const completeLocalSale = async () => {
+        draftFinalizedRef.current = true;
+
         if (activeHeldSaleId) {
-            await deleteHeldSale(activeHeldSaleId);
+            await deleteHeldSale(offlineOwner, activeHeldSaleId);
         }
 
         if (draft?.sourceVoiceNoteId) {
+            // Mark consumed rather than deleting: the note becomes permanently
+            // unclaimable so it can never produce a second sale, even from a
+            // stale tab that still holds a reference to it.
+            await setVoiceNoteSaleState(
+                offlineOwner,
+                draft.sourceVoiceNoteId,
+                'consumed',
+            );
             await voiceQueue.remove(draft.sourceVoiceNoteId);
         }
 
@@ -285,6 +458,14 @@ export default function CashierIndex({
             return;
         }
 
+        if (draft.paymentUnknown && draft.paymentMode !== 'hold') {
+            toast.error(
+                'Konfirmasi jumlah pembayaran sebelum menyimpan transaksi.',
+            );
+
+            return;
+        }
+
         const total = draft.items.reduce(
             (sum, item) => sum + item.quantity * item.unit_price,
             0,
@@ -300,8 +481,10 @@ export default function CashierIndex({
 
         const payload: BatchTransactionPayload = {
             client_uuid: draft.clientUuid,
-            outlet_id: selectedOutlet.id,
-            shift_id: currentShift.id,
+            // Attribute to the capture-time outlet/shift when known, so a sale
+            // reviewed later is never misfiled against the current shift.
+            outlet_id: draft.originOutletId ?? selectedOutlet.id,
+            shift_id: draft.originShiftId ?? currentShift.id,
             items: draft.items.map((item) => ({
                 category_id: item.category_id as number,
                 quantity: item.quantity,
@@ -340,10 +523,62 @@ export default function CashierIndex({
 
     const handleRemoveHeldSale = async (id: string) => {
         try {
-            await deleteHeldSale(id);
+            await deleteHeldSale(offlineOwner, id);
             toast.success('Transaksi ditahan dihapus.');
         } catch (error) {
             toast.error(getRequestErrorMessage(error));
+        }
+    };
+
+    // Local guidance only: opening cash plus the total sales the server has
+    // already tallied for this shift. The server recomputes authoritatively on
+    // close, so this figure just helps the cashier eyeball the drawer.
+    const expectedCashEstimate =
+        (currentShift?.opening_cash ?? 0) + stats.total_sales;
+
+    const handleCloseShift = async ({
+        actualCash,
+        note,
+    }: {
+        actualCash: number;
+        note: string;
+    }) => {
+        if (!currentShift || !selectedOutlet) {
+            return;
+        }
+
+        const payload: ReconciliationPayload = {
+            client_uuid: createUuid(),
+            shift_id: currentShift.id,
+            actual_cash: actualCash,
+            note: note.trim() || null,
+        };
+
+        setIsClosingShift(true);
+
+        try {
+            const result = await offlineReconciliations.submit(
+                payload,
+                selectedOutlet.id,
+            );
+
+            setCloseShiftOpen(false);
+
+            if (result === 'queued') {
+                toast.success(
+                    offlineSales.pendingCount > 0
+                        ? 'Tutup kas antre — akan diproses setelah transaksi shift ini tersinkron.'
+                        : 'Tutup kas tersimpan dan akan dikirim otomatis saat online.',
+                );
+            } else {
+                toast.success('Kas berhasil ditutup dan shift diakhiri.');
+                setStartedShift(null);
+                router.reload();
+            }
+        } catch (error) {
+            toast.error(getRequestErrorMessage(error));
+        } finally {
+            setIsClosingShift(false);
         }
     };
 
@@ -442,7 +677,10 @@ export default function CashierIndex({
 
                 <VoiceRecorder
                     onRecorded={async (recording) => {
-                        await voiceQueue.enqueue(recording);
+                        await voiceQueue.enqueue({
+                            ...recording,
+                            shiftId: currentShift.id,
+                        });
                         toast.success(
                             isOnline
                                 ? 'Rekaman aman dan masuk antrean proses.'
@@ -469,6 +707,17 @@ export default function CashierIndex({
                     categories={categories}
                     onSelect={openManualReview}
                 />
+
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    className="min-h-14 rounded-xl border-destructive/30 text-base text-destructive hover:bg-destructive/5 hover:text-destructive"
+                    onClick={() => setCloseShiftOpen(true)}
+                >
+                    <Scale />
+                    Tutup kas & akhiri shift
+                </Button>
             </main>
 
             <TransactionReviewSheet
@@ -477,10 +726,20 @@ export default function CashierIndex({
                 categories={categories}
                 voiceNote={currentVoiceNote}
                 isSubmitting={isSubmitting}
-                onOpenChange={setReviewOpen}
+                onOpenChange={handleReviewOpenChange}
                 onDraftChange={setDraft}
                 onConfirm={handleConfirm}
                 onHold={handleHold}
+            />
+
+            <CloseShiftSheet
+                open={closeShiftOpen}
+                shift={currentShift}
+                expectedCashEstimate={expectedCashEstimate}
+                pendingSalesCount={offlineSales.pendingCount}
+                isSubmitting={isClosingShift}
+                onOpenChange={setCloseShiftOpen}
+                onSubmit={handleCloseShift}
             />
         </>
     );

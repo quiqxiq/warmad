@@ -1,7 +1,15 @@
-import { LayoutDashboard, MapPinned, Mic2 } from 'lucide-react';
+import {
+    BookOpenCheck,
+    LayoutDashboard,
+    MapPinned,
+    Mic2,
+    Users,
+} from 'lucide-react';
 import { index as outletIndex } from '@/actions/App/Http/Controllers/OutletController';
 import { dashboard } from '@/routes';
 import { index as cashierIndex } from '@/routes/cashier';
+import { index as debtIndex } from '@/routes/debts';
+import { index as penjagaIndex } from '@/routes/penjaga';
 import type { Auth, NavItem } from '@/types';
 
 function getRoles(auth: Auth): string[] {
@@ -33,12 +41,22 @@ export function getAppNavigation(auth: Auth): NavItem[] {
             href: cashierIndex(),
             icon: Mic2,
         },
+        {
+            title: 'Bon',
+            href: debtIndex(),
+            icon: BookOpenCheck,
+        },
         ...(canManageOutlets
             ? [
                   {
                       title: 'Outlet',
                       href: outletIndex(),
                       icon: MapPinned,
+                  } satisfies NavItem,
+                  {
+                      title: 'Penjaga',
+                      href: penjagaIndex(),
+                      icon: Users,
                   } satisfies NavItem,
               ]
             : []),

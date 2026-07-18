@@ -3,7 +3,11 @@
 namespace App\Actions\Transactions;
 
 use App\Enums\DebtStatus;
+use App\Enums\ShiftStatus;
+use App\Models\Category;
 use App\Models\Debt;
+use App\Models\Outlet;
+use App\Models\Shift;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
@@ -11,6 +15,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use LogicException;
 use Ramsey\Uuid\Uuid;
 
@@ -67,6 +72,47 @@ class CreateTransactionBatchAction
                     'created' => false,
                     'data' => $this->responseData($data['client_uuid'], $transactions),
                 ];
+            }
+
+            $outlet = Outlet::query()
+                ->accessibleTo($user)
+                ->whereKey($data['outlet_id'])
+                ->where('tenant_id', $tenantId)
+                ->where('is_active', true)
+                ->first();
+
+            if ($outlet === null) {
+                throw ValidationException::withMessages([
+                    'outlet_id' => ['The selected outlet is invalid.'],
+                ]);
+            }
+
+            $shiftExists = Shift::query()
+                ->whereKey($data['shift_id'])
+                ->where('tenant_id', $tenantId)
+                ->whereBelongsTo($outlet)
+                ->whereBelongsTo($user)
+                ->where('status', ShiftStatus::Active)
+                ->exists();
+
+            if (! $shiftExists) {
+                throw ValidationException::withMessages([
+                    'shift_id' => ['The selected shift is no longer active.'],
+                ]);
+            }
+
+            $categoryIds = collect($data['items'])->pluck('category_id')->unique();
+            $validCategoryCount = Category::query()
+                ->where('tenant_id', $tenantId)
+                ->whereBelongsTo($outlet)
+                ->where('is_active', true)
+                ->whereIn('id', $categoryIds)
+                ->count();
+
+            if ($validCategoryCount !== $categoryIds->count()) {
+                throw ValidationException::withMessages([
+                    'items' => ['One or more categories are no longer available.'],
+                ]);
             }
 
             $totalAmount = 0;

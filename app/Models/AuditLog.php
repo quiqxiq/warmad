@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Database\Factories\AuditLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -25,6 +27,9 @@ use Illuminate\Support\Carbon;
 #[Fillable(['tenant_id', 'user_id', 'auditable_type', 'auditable_id', 'action', 'old_values', 'new_values'])]
 class AuditLog extends Model
 {
+    /** @use HasFactory<AuditLogFactory> */
+    use HasFactory;
+
     public const UPDATED_AT = null;
 
     public $timestamps = false;

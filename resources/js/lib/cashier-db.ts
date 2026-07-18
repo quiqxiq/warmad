@@ -2,7 +2,7 @@ export {
     OFFLINE_DATABASE_EVENT as CASHIER_STORAGE_EVENT,
     OFFLINE_DATABASE_STORES as CASHIER_STORES,
     deleteHeldSale as removeHeldSale,
-    deletePendingSale as removePendingTransaction,
+
     deleteVoiceNote as removeVoiceNote,
     getHeldSale,
     getHeldSales,

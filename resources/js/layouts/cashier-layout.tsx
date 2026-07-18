@@ -3,7 +3,6 @@ import { MapPin, ShieldCheck, Wifi, WifiOff } from 'lucide-react';
 import { getAppNavigation } from '@/components/app-navigation';
 import { SyncStatus } from '@/components/cashier/sync-status';
 import { useCurrentUrl } from '@/hooks/use-current-url';
-import { useNetworkStatus } from '@/hooks/use-network-status';
 import { useOfflineSales } from '@/hooks/use-offline-sales';
 import { index as cashierIndex } from '@/routes/cashier';
 import type { Outlet } from '@/types';
@@ -18,8 +17,8 @@ export default function CashierLayout({
         (props.selectedOutlet as Outlet | null | undefined) ?? null;
     const navigationItems = getAppNavigation(props.auth);
     const { isCurrentOrParentUrl } = useCurrentUrl();
-    const { isOnline } = useNetworkStatus();
     const offlineSales = useOfflineSales(selectedOutlet?.id);
+    const { isOnline } = offlineSales;
 
     return (
         <div className="cashier-shell min-h-dvh overflow-x-hidden bg-background pb-24">

@@ -56,13 +56,25 @@ it('renders the cashier data for the selected accessible outlet', function () {
         'outlet_id' => $selectedOutlet->id,
         'is_active' => false,
     ]);
+    $saleUuid = fake()->uuid();
     Transaction::factory()->create([
+        'sale_uuid' => $saleUuid,
         'tenant_id' => $tenant->id,
         'outlet_id' => $selectedOutlet->id,
         'shift_id' => $activeShift->id,
         'category_id' => $activeCategory->id,
         'user_id' => $owner->id,
-        'total_amount' => 25_000,
+        'total_amount' => 15_000,
+        'occurred_at' => now(),
+    ]);
+    Transaction::factory()->create([
+        'sale_uuid' => $saleUuid,
+        'tenant_id' => $tenant->id,
+        'outlet_id' => $selectedOutlet->id,
+        'shift_id' => $activeShift->id,
+        'category_id' => $firstCategory->id,
+        'user_id' => $owner->id,
+        'total_amount' => 10_000,
         'occurred_at' => now(),
     ]);
     Transaction::factory()->create([
@@ -91,10 +103,10 @@ it('renders the cashier data for the selected accessible outlet', function () {
             ->has('categories', 2)
             ->where('categories.0.id', $firstCategory->id)
             ->where('categories.1.id', $activeCategory->id)
-            ->where('todayStats.sales_total', 25_000)
-            ->where('todayStats.transactions_count', 1)
-            ->where('todayStats.unpaid_debt_total', 7_000)
-            ->where('todayStats.unpaid_debt_count', 1)
+            ->where('stats.total_sales', 25_000)
+            ->where('stats.transaction_count', 1)
+            ->where('stats.outstanding_debt_amount', 7_000)
+            ->where('stats.outstanding_debt_count', 1)
             ->where('auth.roles', [OutletUserRole::Owner->value]),
         );
 });
@@ -130,9 +142,9 @@ it('renders empty cashier props when the user has no accessible outlet', functio
             ->where('selectedOutlet', null)
             ->where('activeShift', null)
             ->has('categories', 0)
-            ->where('todayStats.sales_total', 0)
-            ->where('todayStats.transactions_count', 0)
-            ->where('todayStats.unpaid_debt_total', 0)
-            ->where('todayStats.unpaid_debt_count', 0),
+            ->where('stats.total_sales', 0)
+            ->where('stats.transaction_count', 0)
+            ->where('stats.outstanding_debt_amount', 0)
+            ->where('stats.outstanding_debt_count', 0),
         );
 });

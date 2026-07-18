@@ -8,6 +8,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { UserInfo } from '@/components/user-info';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
+import { pauseVoiceWorker } from '@/hooks/use-voice-queue';
+import { pauseOfflineReconciliationCoordinator } from '@/lib/offline-reconciliation-coordinator';
+import { pauseOfflineSalesCoordinator } from '@/lib/offline-sales-coordinator';
 import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
 import type { User } from '@/types';
@@ -20,6 +23,14 @@ export function UserMenuContent({ user }: Props) {
     const cleanup = useMobileNavigation();
 
     const handleLogout = () => {
+        if (user.tenant_id !== null) {
+            const owner = { tenantId: user.tenant_id, userId: user.id };
+
+            pauseVoiceWorker(owner);
+            void pauseOfflineReconciliationCoordinator();
+            void pauseOfflineSalesCoordinator();
+        }
+
         cleanup();
         router.flushAll();
     };

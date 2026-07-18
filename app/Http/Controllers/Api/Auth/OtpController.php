@@ -7,8 +7,10 @@ use App\Models\User;
 use App\Services\Otp\OtpService;
 use App\Services\Otp\OtpVerificationResult;
 use App\Services\WhatsApp\WhatsAppGateway;
+use App\Support\HomeRoute;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 
 class OtpController extends Controller
@@ -96,11 +98,20 @@ class OtpController extends Controller
             $user->forceFill(['phone_verified_at' => now()])->save();
         }
 
+        // Establish the web session so the Inertia shell (dashboard, cashier)
+        // and the stateful API share one cookie-based identity. A Sanctum token
+        // is still issued for non-browser clients that have no session.
+        if ($request->hasSession()) {
+            Auth::login($user, remember: true);
+            $request->session()->regenerate();
+        }
+
         $token = $user->createToken($validated['device_name'] ?? 'otp-login');
 
         return response()->json([
             'token' => $token->plainTextToken,
             'user' => $user,
+            'redirect' => HomeRoute::for($user),
         ]);
     }
 

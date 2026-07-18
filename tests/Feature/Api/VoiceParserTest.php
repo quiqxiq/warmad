@@ -5,6 +5,8 @@ use App\Models\Category;
 use App\Models\Outlet;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\Voice\UnavailableVoiceParser;
+use App\Services\Voice\VoiceParserService;
 use Illuminate\Http\UploadedFile;
 use Laravel\Sanctum\Sanctum;
 
@@ -122,4 +124,30 @@ it('rejects an outlet from another tenant', function () {
     ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('outlet_id');
+});
+
+it('fails closed when no voice parser driver is configured', function () {
+    app()->bind(VoiceParserService::class, UnavailableVoiceParser::class);
+    $file = UploadedFile::fake()->create('voicenote.webm', 100, 'audio/webm');
+
+    $this->postJson('/api/voice/parse', [
+        'outlet_id' => $this->outlet->id,
+        'audio' => $file,
+    ])->assertStatus(503);
+});
+
+it('throttles excessive voice parse requests', function () {
+    $file = fn () => UploadedFile::fake()->create('voicenote.webm', 100, 'audio/webm');
+
+    foreach (range(1, 20) as $attempt) {
+        $this->postJson('/api/voice/parse', [
+            'outlet_id' => $this->outlet->id,
+            'audio' => $file(),
+        ])->assertOk();
+    }
+
+    $this->postJson('/api/voice/parse', [
+        'outlet_id' => $this->outlet->id,
+        'audio' => $file(),
+    ])->assertStatus(429);
 });

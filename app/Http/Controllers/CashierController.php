@@ -40,11 +40,11 @@ class CashierController extends Controller
 
         $activeShift = null;
         $categories = collect();
-        $todayStats = [
-            'sales_total' => 0,
-            'transactions_count' => 0,
-            'unpaid_debt_total' => 0,
-            'unpaid_debt_count' => 0,
+        $stats = [
+            'total_sales' => 0,
+            'transaction_count' => 0,
+            'outstanding_debt_amount' => 0,
+            'outstanding_debt_count' => 0,
         ];
 
         if ($selectedOutlet !== null) {
@@ -62,9 +62,14 @@ class CashierController extends Controller
                 ->orderBy('name')
                 ->get();
 
-            $todaySales = Transaction::query()
+            $todaySalesStats = Transaction::query()
                 ->whereBelongsTo($selectedOutlet)
-                ->whereDate('occurred_at', today());
+                ->whereDate('occurred_at', today())
+                ->toBase()
+                ->selectRaw('COALESCE(SUM(total_amount), 0) as total_sales')
+                ->selectRaw('COUNT(DISTINCT sale_uuid) as batched_sale_count')
+                ->selectRaw('SUM(CASE WHEN sale_uuid IS NULL THEN 1 ELSE 0 END) as legacy_sale_count')
+                ->first();
 
             $outstandingDebtStats = Debt::query()
                 ->whereBelongsTo($selectedOutlet)
@@ -74,11 +79,11 @@ class CashierController extends Controller
                 ->selectRaw('COUNT(*) as outstanding_count')
                 ->first();
 
-            $todayStats = [
-                'sales_total' => (int) (clone $todaySales)->sum('total_amount'),
-                'transactions_count' => (clone $todaySales)->count(),
-                'unpaid_debt_total' => (int) $outstandingDebtStats->outstanding_total,
-                'unpaid_debt_count' => (int) $outstandingDebtStats->outstanding_count,
+            $stats = [
+                'total_sales' => (int) $todaySalesStats->total_sales,
+                'transaction_count' => (int) $todaySalesStats->batched_sale_count + (int) $todaySalesStats->legacy_sale_count,
+                'outstanding_debt_amount' => (int) $outstandingDebtStats->outstanding_total,
+                'outstanding_debt_count' => (int) $outstandingDebtStats->outstanding_count,
             ];
         }
 
@@ -87,7 +92,7 @@ class CashierController extends Controller
             'selectedOutlet' => $selectedOutlet,
             'activeShift' => $activeShift,
             'categories' => $categories,
-            'todayStats' => $todayStats,
+            'stats' => $stats,
         ]);
     }
 }

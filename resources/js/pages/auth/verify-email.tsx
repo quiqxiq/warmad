@@ -1,12 +1,30 @@
 // Components
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, router, usePage } from '@inertiajs/react';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { pauseVoiceWorker } from '@/hooks/use-voice-queue';
+import { pauseOfflineReconciliationCoordinator } from '@/lib/offline-reconciliation-coordinator';
+import { pauseOfflineSalesCoordinator } from '@/lib/offline-sales-coordinator';
 import { logout } from '@/routes';
 import { send } from '@/routes/verification';
 
 export default function VerifyEmail({ status }: { status?: string }) {
+    const { auth } = usePage().props;
+
+    const handleLogout = () => {
+        if (auth.user.tenant_id !== null) {
+            pauseVoiceWorker({
+                tenantId: auth.user.tenant_id,
+                userId: auth.user.id,
+            });
+            void pauseOfflineReconciliationCoordinator();
+            void pauseOfflineSalesCoordinator();
+        }
+
+        router.flushAll();
+    };
+
     return (
         <>
             <Head title="Email verification" />
@@ -29,6 +47,7 @@ export default function VerifyEmail({ status }: { status?: string }) {
                         <TextLink
                             href={logout()}
                             className="mx-auto block text-sm"
+                            onClick={handleLogout}
                         >
                             Log out
                         </TextLink>

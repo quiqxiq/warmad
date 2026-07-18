@@ -66,32 +66,4 @@ class DebtController extends Controller
 
         return response()->json(['data' => $debt]);
     }
-
-    /**
-     * Record a (partial) payment on the debt.
-     */
-    public function update(Request $request, Debt $debt): JsonResponse
-    {
-        Gate::authorize('update', $debt);
-
-        $validated = $request->validate([
-            'paid_amount' => ['required', 'integer', 'min:0', 'max:'.$debt->amount],
-            'note' => ['nullable', 'string', 'max:255'],
-        ]);
-
-        $isPaid = $validated['paid_amount'] >= $debt->amount;
-
-        $debt->update([
-            'paid_amount' => $validated['paid_amount'],
-            'note' => $validated['note'] ?? $debt->note,
-            'status' => match (true) {
-                $isPaid => DebtStatus::Paid,
-                $validated['paid_amount'] > 0 => DebtStatus::PartiallyPaid,
-                default => DebtStatus::Unpaid,
-            },
-            'paid_at' => $isPaid ? now() : null,
-        ]);
-
-        return response()->json(['data' => $debt]);
-    }
 }

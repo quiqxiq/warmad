@@ -17,11 +17,23 @@ trait BelongsToTenant
     public static function bootBelongsToTenant(): void
     {
         static::addGlobalScope('tenant', function (Builder $builder) {
-            $tenantId = auth()->user()?->tenant_id;
+            $user = auth()->user();
 
-            if ($tenantId !== null) {
-                $builder->where($builder->qualifyColumn('tenant_id'), $tenantId);
+            // Unauthenticated contexts (seeders, queued jobs, console) run
+            // without a tenant scope by design.
+            if ($user === null) {
+                return;
             }
+
+            // Fail closed: an authenticated user without a tenant must never
+            // see another tenant's rows.
+            if ($user->tenant_id === null) {
+                $builder->whereRaw('1 = 0');
+
+                return;
+            }
+
+            $builder->where($builder->qualifyColumn('tenant_id'), $user->tenant_id);
         });
 
         static::creating(function (Model $model) {

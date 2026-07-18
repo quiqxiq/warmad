@@ -72,6 +72,14 @@ class Shift extends Model
     }
 
     /**
+     * @return HasMany<DebtPayment, covariant $this>
+     */
+    public function debtPayments(): HasMany
+    {
+        return $this->hasMany(DebtPayment::class);
+    }
+
+    /**
      * @return HasOne<CashReconciliation, covariant $this>
      */
     public function cashReconciliation(): HasOne

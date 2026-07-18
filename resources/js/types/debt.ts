@@ -1,6 +1,6 @@
 import type { Outlet } from './outlet';
 
-export type DebtStatus = 'paid' | 'partial' | 'unpaid';
+export type DebtStatus = 'paid' | 'partially_paid' | 'unpaid';
 
 export type Debt = {
     id: number;

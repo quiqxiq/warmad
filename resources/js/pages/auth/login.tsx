@@ -1,117 +1,197 @@
-import { Form, Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
+import { REGEXP_ONLY_DIGITS } from 'input-otp';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import InputError from '@/components/input-error';
-import PasskeyVerify from '@/components/passkey-verify';
-import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import {
+    InputOTP,
+    InputOTPGroup,
+    InputOTPSlot,
+} from '@/components/ui/input-otp';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { ApiError, apiRequest, getRequestErrorMessage } from '@/lib/api';
 import { register } from '@/routes';
-import { store } from '@/routes/login';
-import { request } from '@/routes/password';
+import {
+    request as requestOtp,
+    verify as verifyOtp,
+} from '@/routes/api/auth/otp';
 
-type Props = {
-    status?: string;
-    canResetPassword: boolean;
+const OTP_LENGTH = 6;
+
+type VerifyResponse = {
+    redirect: string;
 };
 
-export default function Login({ status, canResetPassword }: Props) {
+type Step = 'phone' | 'code';
+
+export default function Login() {
+    const [step, setStep] = useState<Step>('phone');
+    const [phone, setPhone] = useState('');
+    const [code, setCode] = useState('');
+    const [processing, setProcessing] = useState(false);
+    const [error, setError] = useState<string | undefined>();
+
+    async function handleRequestOtp(event: React.FormEvent) {
+        event.preventDefault();
+        setProcessing(true);
+        setError(undefined);
+
+        try {
+            const response = await apiRequest<{ message: string }>(
+                requestOtp(),
+                { phone },
+            );
+            toast.success(response.message);
+            setStep('code');
+        } catch (caught) {
+            setError(resolveFieldError(caught, 'phone'));
+        } finally {
+            setProcessing(false);
+        }
+    }
+
+    async function handleVerifyOtp(event: React.FormEvent) {
+        event.preventDefault();
+        setProcessing(true);
+        setError(undefined);
+
+        try {
+            const response = await apiRequest<VerifyResponse>(verifyOtp(), {
+                phone,
+                code,
+            });
+            // The server established the session cookie; hand off to Inertia.
+            router.visit(response.redirect);
+        } catch (caught) {
+            setCode('');
+            setError(resolveFieldError(caught, 'code'));
+        } finally {
+            setProcessing(false);
+        }
+    }
+
     return (
         <>
-            <Head title="Log in" />
+            <Head title="Masuk" />
 
-            <PasskeyVerify />
+            {step === 'phone' ? (
+                <form
+                    onSubmit={handleRequestOtp}
+                    className="flex flex-col gap-6"
+                >
+                    <div className="grid gap-2">
+                        <Label htmlFor="phone">Nomor WhatsApp</Label>
+                        <Input
+                            id="phone"
+                            type="tel"
+                            name="phone"
+                            inputMode="numeric"
+                            required
+                            autoFocus
+                            autoComplete="tel"
+                            placeholder="08xxxxxxxxxx"
+                            value={phone}
+                            onChange={(event) => setPhone(event.target.value)}
+                        />
+                        <InputError message={error} />
+                    </div>
 
-            <Form
-                {...store.form()}
-                resetOnSuccess={['password']}
-                className="flex flex-col gap-6"
-            >
-                {({ processing, errors }) => (
-                    <>
-                        <div className="grid gap-6">
-                            <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    name="email"
-                                    required
-                                    autoFocus
-                                    tabIndex={1}
-                                    autoComplete="email"
-                                    placeholder="email@example.com"
-                                />
-                                <InputError message={errors.email} />
-                            </div>
+                    <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={processing}
+                        data-test="request-otp-button"
+                    >
+                        {processing && <Spinner />}
+                        Kirim kode OTP
+                    </Button>
 
-                            <div className="grid gap-2">
-                                <div className="flex items-center">
-                                    <Label htmlFor="password">Password</Label>
-                                    {canResetPassword && (
-                                        <TextLink
-                                            href={request()}
-                                            className="ml-auto text-sm"
-                                            tabIndex={5}
-                                        >
-                                            Forgot your password?
-                                        </TextLink>
-                                    )}
-                                </div>
-                                <PasswordInput
-                                    id="password"
-                                    name="password"
-                                    required
-                                    tabIndex={2}
-                                    autoComplete="current-password"
-                                    placeholder="Password"
-                                />
-                                <InputError message={errors.password} />
-                            </div>
+                    <div className="text-center text-sm text-muted-foreground">
+                        Belum punya warung?{' '}
+                        <TextLink href={register()}>Daftar</TextLink>
+                    </div>
+                </form>
+            ) : (
+                <form
+                    onSubmit={handleVerifyOtp}
+                    className="flex flex-col gap-6"
+                >
+                    <div className="grid gap-2">
+                        <Label htmlFor="code">Kode OTP</Label>
+                        <p className="text-sm text-muted-foreground">
+                            Masukkan 6 digit kode yang kami kirim ke {phone}{' '}
+                            via WhatsApp.
+                        </p>
+                        <InputOTP
+                            id="code"
+                            name="code"
+                            maxLength={OTP_LENGTH}
+                            value={code}
+                            onChange={setCode}
+                            disabled={processing}
+                            pattern={REGEXP_ONLY_DIGITS}
+                            autoFocus
+                            containerClassName="justify-center"
+                        >
+                            <InputOTPGroup>
+                                {Array.from(
+                                    { length: OTP_LENGTH },
+                                    (_, index) => (
+                                        <InputOTPSlot
+                                            key={index}
+                                            index={index}
+                                        />
+                                    ),
+                                )}
+                            </InputOTPGroup>
+                        </InputOTP>
+                        <InputError message={error} />
+                    </div>
 
-                            <div className="flex items-center space-x-3">
-                                <Checkbox
-                                    id="remember"
-                                    name="remember"
-                                    tabIndex={3}
-                                />
-                                <Label htmlFor="remember">Remember me</Label>
-                            </div>
+                    <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={processing || code.length < OTP_LENGTH}
+                        data-test="verify-otp-button"
+                    >
+                        {processing && <Spinner />}
+                        Masuk
+                    </Button>
 
-                            <Button
-                                type="submit"
-                                className="mt-4 w-full"
-                                tabIndex={4}
-                                disabled={processing}
-                                data-test="login-button"
-                            >
-                                {processing && <Spinner />}
-                                Log in
-                            </Button>
-                        </div>
-
-                        <div className="text-center text-sm text-muted-foreground">
-                            Don't have an account?{' '}
-                            <TextLink href={register()} tabIndex={5}>
-                                Sign up
-                            </TextLink>
-                        </div>
-                    </>
-                )}
-            </Form>
-
-            {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    {status}
-                </div>
+                    <div className="text-center text-sm text-muted-foreground">
+                        <button
+                            type="button"
+                            className="underline-offset-4 hover:underline"
+                            onClick={() => {
+                                setStep('phone');
+                                setCode('');
+                                setError(undefined);
+                            }}
+                        >
+                            Ganti nomor
+                        </button>
+                    </div>
+                </form>
             )}
         </>
     );
 }
 
+function resolveFieldError(caught: unknown, field: string): string {
+    if (caught instanceof ApiError) {
+        const fieldError = caught.body?.errors?.[field]?.[0];
+
+        return fieldError ?? caught.message;
+    }
+
+    return getRequestErrorMessage(caught);
+}
+
 Login.layout = {
-    title: 'Log in to your account',
-    description: 'Enter your email and password below to log in',
+    title: 'Masuk ke Amanah',
+    description: 'Masukkan nomor WhatsApp untuk menerima kode OTP',
 };

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ParseVoiceRequest;
 use App\Models\Category;
 use App\Services\Voice\VoiceParserService;
+use App\Services\Voice\VoiceParserUnavailableException;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
@@ -17,7 +18,12 @@ class VoiceParserController extends Controller
      */
     public function parse(ParseVoiceRequest $request, VoiceParserService $voiceParserService): JsonResponse
     {
-        $result = $voiceParserService->parse($request->audio());
+        try {
+            $result = $voiceParserService->parse($request->audio());
+        } catch (VoiceParserUnavailableException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 503);
+        }
+
         $categories = $request->outlet()
             ->categories()
             ->where('is_active', true)

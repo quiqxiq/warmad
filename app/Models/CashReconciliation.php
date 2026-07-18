@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
+ * @property string|null $client_uuid
  * @property int $tenant_id
  * @property int $outlet_id
  * @property int $shift_id
@@ -29,7 +30,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  */
 #[Fillable([
-    'tenant_id', 'outlet_id', 'shift_id', 'expected_cash', 'actual_cash',
+    'client_uuid', 'tenant_id', 'outlet_id', 'shift_id', 'expected_cash', 'actual_cash',
     'difference', 'status', 'note', 'created_by', 'updated_by', 'reconciled_at',
 ])]
 class CashReconciliation extends Model

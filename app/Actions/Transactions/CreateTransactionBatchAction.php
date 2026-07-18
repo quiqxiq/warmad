@@ -55,6 +55,19 @@ class CreateTransactionBatchAction
             throw new LogicException('A tenant is required to create a transaction batch.');
         }
 
+        $existingTransactions = Transaction::query()
+            ->where('tenant_id', $tenantId)
+            ->where('sale_uuid', $data['client_uuid'])
+            ->oldest('id')
+            ->get();
+
+        if ($existingTransactions->isNotEmpty()) {
+            return [
+                'created' => false,
+                'data' => $this->responseData($data['client_uuid'], $existingTransactions),
+            ];
+        }
+
         return DB::transaction(function () use ($data, $user, $tenantId): array {
             Tenant::query()
                 ->whereKey($tenantId)

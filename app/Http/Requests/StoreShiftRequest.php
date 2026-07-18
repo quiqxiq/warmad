@@ -34,9 +34,13 @@ class StoreShiftRequest extends FormRequest
     {
         return [
             'client_uuid' => ['required', 'uuid'],
-            'outlet_id' => ['required', 'integer', Rule::exists(Outlet::class, 'id')],
+            'outlet_id' => [
+                'required',
+                'integer',
+                Rule::exists(Outlet::class, 'id')->where('tenant_id', $this->user()?->tenant_id),
+            ],
             'opening_cash' => ['required', 'integer', 'min:0'],
-            'started_at' => ['required', 'date', 'before_or_equal:now'],
+            'started_at' => ['required', 'date', 'before_or_equal:'.now()->addMinutes(15)->toIso8601String()],
         ];
     }
 

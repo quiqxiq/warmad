@@ -7,7 +7,7 @@ import { index as outletIndex } from '@/actions/App/Http/Controllers/OutletContr
 import { CashierHeader } from '@/components/cashier/cashier-header';
 import { CategoryGrid } from '@/components/cashier/category-grid';
 import { CloseShiftSheet } from '@/components/cashier/close-shift-sheet';
-import { HeldSalesPanel } from '@/components/cashier/held-sales-panel';
+import { HeldTransactions } from '@/components/cashier/held-transactions';
 import { StartShiftForm } from '@/components/cashier/start-shift-form';
 import { TransactionReviewSheet } from '@/components/cashier/transaction-review-sheet';
 import { VoiceQueue } from '@/components/cashier/voice-queue';
@@ -697,7 +697,7 @@ export default function CashierIndex({
                     onRemove={(id) => void voiceQueue.remove(id)}
                 />
 
-                <HeldSalesPanel
+                <HeldTransactions
                     sales={heldSales}
                     onResume={resumeHeldSale}
                     onRemove={(id) => void handleRemoveHeldSale(id)}

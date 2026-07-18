@@ -27,13 +27,16 @@ beforeEach(function () {
         'quantity' => 1,
         'unit_price' => 50_000,
         'total_amount' => 50_000,
+        'payment_amount' => 60_000,
+        'change_amount' => 10_000,
     ]);
 });
 
 it('auto-approves a reconciliation within tolerance', function () {
     Sanctum::actingAs($this->user);
 
-    // expected = 100k opening + 50k transactions = 150k; actual 145k → diff -5k
+    // The customer tendered 60k for a 50k sale, so only 50k remains in the register.
+    // expected = 100k opening + 50k retained = 150k; actual 145k → diff -5k
     $this->postJson('/api/cash-reconciliations', [
         'shift_id' => $this->shift->id,
         'actual_cash' => 145_000,
@@ -42,6 +45,18 @@ it('auto-approves a reconciliation within tolerance', function () {
         ->assertJsonPath('data.status', ReconciliationStatus::AutoApproved->value)
         ->assertJsonPath('data.difference', -5_000)
         ->assertJsonPath('data.expected_cash', 150_000);
+});
+
+it('does not count returned change as expected cash', function () {
+    Sanctum::actingAs($this->user);
+
+    $this->postJson('/api/cash-reconciliations', [
+        'shift_id' => $this->shift->id,
+        'actual_cash' => 150_000,
+    ])
+        ->assertCreated()
+        ->assertJsonPath('data.expected_cash', 150_000)
+        ->assertJsonPath('data.difference', 0);
 });
 
 it('requires a note when the difference exceeds tolerance', function () {

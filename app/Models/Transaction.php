@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property string|null $client_uuid
+ * @property string|null $sale_uuid
  * @property int $tenant_id
  * @property int $outlet_id
  * @property int $shift_id
@@ -23,6 +24,8 @@ use Illuminate\Support\Carbon;
  * @property int $quantity
  * @property int $unit_price
  * @property int $total_amount
+ * @property int|null $payment_amount
+ * @property int $change_amount
  * @property InputMethod $input_method
  * @property string|null $note
  * @property Carbon $occurred_at
@@ -30,8 +33,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  */
 #[Fillable([
-    'client_uuid', 'tenant_id', 'outlet_id', 'shift_id', 'category_id', 'user_id',
-    'barcode', 'quantity', 'unit_price', 'total_amount', 'input_method', 'note', 'occurred_at',
+    'client_uuid', 'sale_uuid', 'tenant_id', 'outlet_id', 'shift_id', 'category_id', 'user_id',
+    'barcode', 'quantity', 'unit_price', 'total_amount', 'payment_amount', 'change_amount', 'input_method', 'note', 'occurred_at',
 ])]
 class Transaction extends Model
 {
@@ -49,6 +52,8 @@ class Transaction extends Model
             'quantity' => 'integer',
             'unit_price' => 'integer',
             'total_amount' => 'integer',
+            'payment_amount' => 'integer',
+            'change_amount' => 'integer',
             'input_method' => InputMethod::class,
             'occurred_at' => 'datetime',
         ];

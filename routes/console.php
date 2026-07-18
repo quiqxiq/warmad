@@ -17,4 +17,4 @@ Schedule::call(function () {
     })->each(function (Tenant $tenant) {
         SendDailyOwnerReportJob::dispatch($tenant);
     });
-})->dailyAt('21:00');
+})->dailyAt('21:00')->timezone('Asia/Jakarta');

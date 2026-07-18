@@ -54,7 +54,10 @@ class CashReconciliationController extends Controller
 
         $shift = Shift::query()->whereKey($validated['shift_id'])->firstOrFail();
 
-        $expected = $shift->opening_cash + (int) $shift->transactions()->sum('total_amount');
+        $retainedCash = (int) $shift->transactions()
+            ->selectRaw('COALESCE(SUM(CASE WHEN payment_amount IS NULL OR payment_amount > total_amount THEN total_amount ELSE payment_amount END), 0) as retained_cash')
+            ->value('retained_cash');
+        $expected = $shift->opening_cash + $retainedCash;
         $difference = $validated['actual_cash'] - $expected;
         $withinTolerance = abs($difference) <= self::AUTO_APPROVE_TOLERANCE;
 

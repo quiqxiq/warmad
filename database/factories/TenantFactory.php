@@ -19,7 +19,7 @@ class TenantFactory extends Factory
     {
         return [
             'name' => 'Juragan '.fake()->firstName(),
-            'phone' => '+628'.fake()->unique()->numerify('##########'),
+            'phone' => '628'.fake()->unique()->numerify('##########'),
         ];
     }
 }

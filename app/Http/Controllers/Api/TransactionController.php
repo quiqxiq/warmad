@@ -2,12 +2,19 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\Transactions\CreateTransactionBatchAction;
 use App\Enums\InputMethod;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreTransactionBatchRequest;
+use App\Models\Debt;
 use App\Models\Transaction;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class TransactionController extends Controller
@@ -49,21 +56,77 @@ class TransactionController extends Controller
             'barcode' => ['nullable', 'string', 'max:255'],
             'quantity' => ['required', 'integer', 'min:1'],
             'unit_price' => ['required', 'integer', 'min:0'],
+            'payment_amount' => ['nullable', 'integer', 'min:0'],
+            'customer_name' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::requiredIf(function () use ($request) {
+                    $total = $request->integer('quantity', 0) * $request->integer('unit_price', 0);
+
+                    return $request->has('payment_amount') && $request->integer('payment_amount') < $total;
+                }),
+            ],
             'input_method' => ['required', Rule::enum(InputMethod::class)],
             'note' => ['nullable', 'string', 'max:255'],
             'occurred_at' => ['required', 'date'],
         ]);
 
-        $transaction = Transaction::updateOrCreate(
-            ['client_uuid' => $validated['client_uuid']],
-            [
-                ...$validated,
-                'user_id' => $request->user()->id,
-                'total_amount' => $validated['quantity'] * $validated['unit_price'],
-            ],
-        );
+        $totalAmount = $validated['quantity'] * $validated['unit_price'];
+        $paymentAmount = $validated['payment_amount'] ?? $totalAmount;
+        $changeAmount = max(0, $paymentAmount - $totalAmount);
+
+        $customerName = $validated['customer_name'] ?? null;
+        unset($validated['customer_name']);
+
+        $transaction = DB::transaction(function () use ($validated, $request, $totalAmount, $paymentAmount, $changeAmount, $customerName) {
+            $tx = Transaction::updateOrCreate(
+                ['client_uuid' => $validated['client_uuid']],
+                [
+                    ...$validated,
+                    'user_id' => $request->user()->id,
+                    'total_amount' => $totalAmount,
+                    'payment_amount' => $paymentAmount,
+                    'change_amount' => $changeAmount,
+                ],
+            );
+
+            if ($tx->wasRecentlyCreated && $paymentAmount < $totalAmount) {
+                Debt::create([
+                    'client_uuid' => (string) Str::uuid(),
+                    'tenant_id' => $tx->tenant_id,
+                    'outlet_id' => $validated['outlet_id'],
+                    'customer_name' => $customerName,
+                    'amount' => $totalAmount - $paymentAmount,
+                    'paid_amount' => 0,
+                    'status' => 'unpaid',
+                    'incurred_at' => Carbon::parse($validated['occurred_at'])->toDateString(),
+                    'note' => 'Bon otomatis dari transaksi kasir. '.($validated['note'] ?? ''),
+                    'created_by' => $request->user()->id,
+                ]);
+            }
+
+            return $tx;
+        });
 
         return response()->json(['data' => $transaction], $transaction->wasRecentlyCreated ? 201 : 200);
+    }
+
+    /**
+     * Record an idempotent multi-item transaction batch.
+     */
+    public function storeBatch(
+        StoreTransactionBatchRequest $request,
+        CreateTransactionBatchAction $createTransactionBatch,
+    ): JsonResponse {
+        /** @var User $user */
+        $user = $request->user();
+        $result = $createTransactionBatch->handle($request->payload(), $user);
+
+        return response()->json(
+            ['data' => $result['data']],
+            $result['created'] ? 201 : 200,
+        );
     }
 
     /**

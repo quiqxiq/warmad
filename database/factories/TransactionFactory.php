@@ -29,6 +29,7 @@ class TransactionFactory extends Factory
 
         return [
             'client_uuid' => (string) Str::uuid7(),
+            'sale_uuid' => null,
             'tenant_id' => Tenant::factory(),
             'outlet_id' => Outlet::factory(),
             'shift_id' => Shift::factory(),
@@ -38,6 +39,8 @@ class TransactionFactory extends Factory
             'quantity' => $quantity,
             'unit_price' => $unitPrice,
             'total_amount' => $quantity * $unitPrice,
+            'payment_amount' => $quantity * $unitPrice,
+            'change_amount' => 0,
             'input_method' => InputMethod::Manual,
             'note' => null,
             'occurred_at' => now()->subMinutes(fake()->numberBetween(1, 600)),

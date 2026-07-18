@@ -1,15 +1,13 @@
 import { Head } from '@inertiajs/react';
+import { index as outletIndex } from '@/actions/App/Http/Controllers/OutletController';
+import type { Outlet } from '@/types';
 
-interface Outlet {
-    id: number;
-    name: string;
-    address: string | null;
-    is_active: boolean;
+type OutletWithShiftCount = Outlet & {
     shifts_count: number;
-}
+};
 
 interface OutletsIndexProps {
-    outlets: Outlet[];
+    outlets: OutletWithShiftCount[];
 }
 
 export default function OutletsIndex({ outlets }: OutletsIndexProps) {
@@ -51,7 +49,7 @@ OutletsIndex.layout = {
     breadcrumbs: [
         {
             title: 'Outlet',
-            href: '/outlets',
+            href: outletIndex(),
         },
     ],
 };

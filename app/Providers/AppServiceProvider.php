@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Services\Reports\DailyOwnerReport;
+use App\Services\Voice\MockVoiceParser;
+use App\Services\Voice\VoiceParserService;
 use App\Services\WhatsApp\FonnteWhatsAppGateway;
 use App\Services\WhatsApp\LogWhatsAppGateway;
 use App\Services\WhatsApp\WhatsAppGateway;
@@ -18,6 +21,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(DailyOwnerReport::class);
+        $this->app->bind(VoiceParserService::class, MockVoiceParser::class);
+
         $this->app->bind(WhatsAppGateway::class, function (): WhatsAppGateway {
             return match (config('services.whatsapp.driver')) {
                 'fonnte' => new FonnteWhatsAppGateway(

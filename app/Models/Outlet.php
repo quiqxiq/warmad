@@ -6,6 +6,7 @@ use App\Enums\OutletUserRole;
 use App\Models\Concerns\BelongsToTenant;
 use Database\Factories\OutletFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -37,6 +38,21 @@ class Outlet extends Model
         return [
             'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * Scope outlets to those the user may operate.
+     *
+     * @param  Builder<Outlet>  $query
+     * @return Builder<Outlet>
+     */
+    public function scopeAccessibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->hasRole(OutletUserRole::Owner->value)) {
+            return $query;
+        }
+
+        return $query->whereHas('users', fn (Builder $users): Builder => $users->whereKey($user->id));
     }
 
     /**

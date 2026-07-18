@@ -75,3 +75,28 @@ it('validates the input method enum', function () {
         ->assertUnprocessable()
         ->assertJsonValidationErrors('input_method');
 });
+
+it('creates a debt automatically if payment is less than total', function () {
+    $payload = transactionPayload([
+        'outlet_id' => $this->outlet->id,
+        'shift_id' => $this->shift->id,
+        'category_id' => $this->category->id,
+        'quantity' => 2,
+        'unit_price' => 5_000,
+        'payment_amount' => 6_000,
+        'customer_name' => 'Budi Setiawan',
+    ]);
+
+    $this->postJson('/api/transactions', $payload)
+        ->assertCreated()
+        ->assertJsonPath('data.total_amount', 10_000)
+        ->assertJsonPath('data.payment_amount', 6_000)
+        ->assertJsonPath('data.change_amount', 0);
+
+    $this->assertDatabaseHas('debts', [
+        'customer_name' => 'Budi Setiawan',
+        'amount' => 4_000,
+        'paid_amount' => 0,
+        'status' => 'unpaid',
+    ]);
+});

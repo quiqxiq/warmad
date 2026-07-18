@@ -43,7 +43,7 @@ class DemoSeeder extends Seeder
     {
         $tenant = Tenant::factory()->create([
             'name' => 'Juragan Demo',
-            'phone' => '+6281234567890',
+            'phone' => '6281234567890',
         ]);
 
         Subscription::factory()->standard()->create(['tenant_id' => $tenant->id]);
@@ -52,7 +52,7 @@ class DemoSeeder extends Seeder
             'tenant_id' => $tenant->id,
             'name' => 'Juragan Demo',
             'email' => 'juragan@example.com',
-            'phone' => '+6281234567890',
+            'phone' => '6281234567890',
         ]);
         $owner->assignRole(OutletUserRole::Owner->value);
 
@@ -60,7 +60,7 @@ class DemoSeeder extends Seeder
             'tenant_id' => $tenant->id,
             'name' => 'Penjaga Demo',
             'email' => 'penjaga@example.com',
-            'phone' => '+6281234567891',
+            'phone' => '6281234567891',
         ]);
         $penjaga->assignRole(OutletUserRole::Penjaga->value);
 

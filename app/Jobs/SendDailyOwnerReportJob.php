@@ -26,20 +26,17 @@ class SendDailyOwnerReportJob implements ShouldQueue
 
     /**
      * Execute the job.
+     *
+     * Runs from the 21:00 daily schedule, so it reports on today's data
+     * (PRD §6.6). A specific date can be passed for backfills.
      */
     public function handle(DailyOwnerReport $reportService, WhatsAppGateway $whatsAppGateway): void
     {
-        $date = $this->date ?? now()->subDay(); // Default to yesterday's report since it runs daily (or today's, let's see)
-        // Wait, plan says "scheduler harian jam 21:00 WIB yang dispatch job per tenant aktif".
-        // If it runs at 21:00 WIB, it sends reports for *today* (today's transactions up to 21:00 or the whole day).
-        // Let's use today ($date = $this->date ?? now()) so that if it runs at 21:00, it reports today's data.
-        $date = $this->date ?? now();
-
-        $message = $reportService->generate($this->tenant, $date);
-
         if (blank($this->tenant->phone)) {
             return;
         }
+
+        $message = $reportService->generate($this->tenant, $this->date ?? now());
 
         $whatsAppGateway->send($this->tenant->phone, $message);
     }
